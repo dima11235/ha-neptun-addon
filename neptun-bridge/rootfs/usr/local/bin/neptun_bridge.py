@@ -10,7 +10,7 @@ RETAIN_DEFAULT = os.getenv("NB_RETAIN", "true").lower() == "true"
 DEBUG          = os.getenv("NB_DEBUG", "false").lower() == "true"
 
 MQTT_HOST = "127.0.0.1"
-MQTT_PORT = int(os.getenv("MQTT_LISTEN_PORT", "1883"))
+MQTT_PORT = int(os.getenv("MQTT_LISTEN_PORT", "2883"))
 MQTT_USER = os.getenv("NB_MQTT_USER", None) or None
 MQTT_PASS = os.getenv("NB_MQTT_PASS", None) or None
 

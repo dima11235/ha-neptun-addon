@@ -73,7 +73,7 @@ if [ -z "$HA_USER" ] || [ "$HA_USER" = "null" ]; then HA_USER=$(get_secret mqtt_
 if [ -z "$HA_PASS" ] || [ "$HA_PASS" = "null" ]; then HA_PASS=$(get_secret mqtt_password); fi
 
 # Экспортируем для mosquitto.conf
-export MQTT_LISTEN_PORT="${MQTT_PORT:-1883}"
+export MQTT_LISTEN_PORT="${MQTT_PORT:-2883}"
 
 if [ -n "$MQTT_USER" ] && [ "$MQTT_USER" != "null" ] && [ -n "$MQTT_PASS" ] && [ "$MQTT_PASS" != "null" ]; then
   export MQTT_ALLOW_ANON="false"
@@ -86,6 +86,11 @@ if [ -n "$MQTT_USER" ] && [ "$MQTT_USER" != "null" ] && [ -n "$MQTT_PASS" ] && [
 else
   export MQTT_ALLOW_ANON="${MQTT_ANON:-true}"
 fi
+
+# Render placeholders in mosquitto.conf (listener / allow_anonymous)
+CONF="/etc/mosquitto/mosquitto.conf"
+sed -i -E "s#\$\{MQTT_LISTEN_PORT\}#${MQTT_LISTEN_PORT}#g" "$CONF"
+sed -i -E "s#\$\{MQTT_ALLOW_ANON\}#${MQTT_ALLOW_ANON}#g" "$CONF"
 
 # Configure bridge to HA broker if credentials provided
 if [ -n "$HA_HOST" ] && [ "$HA_HOST" != "null" ] \
