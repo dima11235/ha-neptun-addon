@@ -1,10 +1,10 @@
 ARG BUILD_ARCH
-ARG BUILD_FROM=ghcr.io/home-assistant/${BUILD_ARCH}-base:3.19
+ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
 # Python + mosquitto
-RUN apk add --no-cache python3 py3-pip mosquitto mosquitto-clients runuser bash tzdata \
- && pip3 install --no-cache-dir paho-mqtt==1.6.1
+# Use Alpine package for paho-mqtt to avoid PEP 668 (externally managed env)
+RUN apk add --no-cache python3 py3-paho-mqtt mosquitto mosquitto-clients runuser bash tzdata
 
 # s6 overlay уже в base образе от HA
 COPY rootfs/ /
