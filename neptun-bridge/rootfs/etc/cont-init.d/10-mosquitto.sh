@@ -9,6 +9,11 @@ MQTT_USER=$(jq -r '.mqtt.user' "$OPTIONS")
 MQTT_PASS=$(jq -r '.mqtt.password' "$OPTIONS")
 MQTT_ANON=$(jq -r '.mqtt.allow_anonymous' "$OPTIONS")
 
+# Ensure persistence directory exists for mosquitto db
+mkdir -p /data/mosquitto || true
+# Align ownership when mosquitto runs as service user (best-effort)
+chown -R mosquitto:mosquitto /data/mosquitto 2>/dev/null || true
+
 # HA MQTT bridge settings
 HA_HOST=$(jq -r '.ha_mqtt.host' "$OPTIONS")
 HA_PORT=$(jq -r '.ha_mqtt.port' "$OPTIONS")
@@ -77,7 +82,6 @@ export MQTT_LISTEN_PORT="${MQTT_PORT:-2883}"
 
 if [ -n "$MQTT_USER" ] && [ "$MQTT_USER" != "null" ] && [ -n "$MQTT_PASS" ] && [ "$MQTT_PASS" != "null" ]; then
   export MQTT_ALLOW_ANON="false"
-  mkdir -p /data/mosquitto
   mosquitto_passwd -c -b /data/mosquitto/passwd "$MQTT_USER" "$MQTT_PASS"
   if ! grep -q "password_file" /etc/mosquitto/mosquitto.conf; then
     echo "password_file /data/mosquitto/passwd" >> /etc/mosquitto/mosquitto.conf
