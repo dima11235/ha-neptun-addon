@@ -3,7 +3,7 @@ import os, sys, json, time, struct
 from datetime import datetime
 import paho.mqtt.client as mqtt
 
-CLOUD_PREFIX   = os.getenv("NB_CLOUD_PREFIX", "14cb98a541")
+CLOUD_PREFIX   = os.getenv("NB_CLOUD_PREFIX", "")
 TOPIC_PREFIX   = os.getenv("NB_TOPIC_PREFIX", "neptun")
 DISCOVERY_PRE  = os.getenv("NB_DISCOVERY_PREFIX", "homeassistant")
 RETAIN_DEFAULT = os.getenv("NB_RETAIN", "true").lower() == "true"
@@ -143,6 +143,7 @@ if MQTT_USER and MQTT_PASS:
 
 state_cache = {}  # per-MAC: keep last flags for command composing
 announced = set() # discovery announced MACs
+mac_to_prefix = {}
 
 def log(*a):
     if DEBUG: print("[BRIDGE]", *a, file=sys.stderr)
@@ -383,16 +384,24 @@ def compose_settings_frame(open_valve: bool, dry=False, close_on_offline=False, 
 def on_connect(c, userdata, flags, rc):
     log("MQTT connected", rc)
     # Входящие бинарные кадры от Neptun (локализованный «облако»-префикс)
-    c.subscribe(f"{CLOUD_PREFIX}/+/from", qos=0)
+    if CLOUD_PREFIX:
+        c.subscribe(f"{CLOUD_PREFIX}/+/from", qos=0)
+    else:
+        c.subscribe("+/+/from", qos=0)
     # Команды от HA
     c.subscribe(f"{TOPIC_PREFIX}/+/cmd/#", qos=0)
 
 def on_message(c, userdata, msg):
     try:
         t = msg.topic
-        if t.startswith(f"{CLOUD_PREFIX}/") and t.endswith("/from"):
+        if t.endswith("/from") and t.count("/") >= 2:
             # mac из топика 14cb.../<MAC>/from
             mac = t.split("/")[1]
+            try:
+                pref = t.split("/")[0]
+                mac_to_prefix[mac] = pref
+            except Exception:
+                pass
             buf = msg.payload if isinstance(msg.payload, (bytes, bytearray)) else bytes(msg.payload)
             if not buf or len(buf) < 8:
                 return
@@ -430,7 +439,17 @@ def on_message(c, userdata, msg):
                     line_cfg=int(st.get("line_in_cfg", 0))
                 )
                 # Публикуем в "облачный" to, RETAIN=TRUE — устройство само чистит
-                c.publish(f"{CLOUD_PREFIX}/{mac}/to", frame, qos=0, retain=True)
+                if CLOUD_PREFIX:
+                    pref = CLOUD_PREFIX
+                else:
+                    try:
+                        pref = mac_to_prefix.get(mac, "")
+                    except Exception:
+                        pref = ""
+                if not pref:
+                    log("No cloud prefix known for", mac, "— waiting for incoming frame to learn it")
+                    return
+                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log("CMD valve ->", mac, "open" if want_open else "close")
             # можно добавить: cmd/get_names -> 0x4E и 0x63, cmd/get_state -> 0x52
 

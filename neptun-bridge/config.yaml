@@ -29,7 +29,7 @@ options:
     user: "!secret mqtt_user"
     password: "!secret mqtt_password"
   bridge:
-    cloud_prefix: "14cb98a541"
+    cloud_prefix: ""
     topic_prefix: "neptun"
     discovery_prefix: "homeassistant"
     retain: true
