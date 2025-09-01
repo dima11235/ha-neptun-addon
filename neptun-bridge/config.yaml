@@ -1,5 +1,5 @@
 name: "Neptun Local Bridge (MQTT + parser)"
-version: "0.1.6"
+version: "0.1.7"
 slug: neptun-bridge
 description: "Локальный брокер MQTT и мост для Neptun (раскладка бинарных пакетов + MQTT Discovery)"
 url: "https://github.com/dima11235/ha-neptun-addon"

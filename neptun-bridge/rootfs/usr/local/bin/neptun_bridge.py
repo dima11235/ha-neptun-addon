@@ -15,6 +15,23 @@ MQTT_PORT = int(os.getenv("NB_MQTT_PORT") or os.getenv("MQTT_LISTEN_PORT", "2883
 MQTT_USER = os.getenv("NB_MQTT_USER", None) or None
 MQTT_PASS = os.getenv("NB_MQTT_PASS", None) or None
 
+# Print startup parameters unconditionally (helps diagnostics even without DEBUG)
+try:
+    print(
+        "[BRIDGE] startup:",
+        f"host={MQTT_HOST}",
+        f"port={MQTT_PORT}",
+        f"user={'set' if (MQTT_USER and MQTT_PASS) else 'none'}",
+        f"cloud_prefix={'<auto>' if not CLOUD_PREFIX else CLOUD_PREFIX}",
+        f"topic_prefix={TOPIC_PREFIX}",
+        f"discovery_prefix={DISCOVERY_PRE}",
+        f"retain={RETAIN_DEFAULT}",
+        f"debug={DEBUG}",
+        sep=" ", file=sys.stderr, flush=True
+    )
+except Exception:
+    pass
+
 # ===== CRC16-CCITT =====
 def crc16_ccitt(data: bytes) -> int:
     c = 0xFFFF
@@ -398,6 +415,15 @@ def on_connect(c, userdata, flags, rc):
         c.subscribe("#", qos=0)
     # Команды от HA
     c.subscribe(f"{TOPIC_PREFIX}/+/cmd/#", qos=0)
+    try:
+        print(
+            "[BRIDGE] subscribed:",
+            f"{CLOUD_PREFIX or '+/+'}/from",
+            f"and {TOPIC_PREFIX}/+/cmd/#",
+            file=sys.stderr, flush=True
+        )
+    except Exception:
+        pass
     if DEBUG:
         print("[BRIDGE]","Subscribed:", f"{CLOUD_PREFIX or '+/+'}/from and {TOPIC_PREFIX}/+/cmd/#", file=sys.stderr, flush=True)
 
@@ -477,6 +503,10 @@ def main():
         try:
             if DEBUG:
                 print("[BRIDGE]", "Connecting to", MQTT_HOST, MQTT_PORT, "user=", bool(MQTT_USER), file=sys.stderr, flush=True)
+            try:
+                print("[BRIDGE] connecting:", MQTT_HOST, MQTT_PORT, "auth=", bool(MQTT_USER and MQTT_PASS), file=sys.stderr, flush=True)
+            except Exception:
+                pass
             if MQTT_USER and MQTT_PASS:
                 client.username_pw_set(MQTT_USER, MQTT_PASS)
             client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)

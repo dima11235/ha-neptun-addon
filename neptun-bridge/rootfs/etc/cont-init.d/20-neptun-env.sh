@@ -71,3 +71,20 @@ if [ -n "$SECRET_MQTT_SERVER" ]; then
 fi
 if [ -z "$NB_HA_MQTT_USER" ] || [ "$NB_HA_MQTT_USER" = "null" ]; then export NB_HA_MQTT_USER=$(get_secret mqtt_username); fi
 if [ -z "$NB_HA_MQTT_PASS" ] || [ "$NB_HA_MQTT_PASS" = "null" ]; then export NB_HA_MQTT_PASS=$(get_secret mqtt_password); fi
+
+# Persist NB_* env vars for all services via s6 container_environment
+ENV_DIR="/var/run/s6/container_environment"
+mkdir -p "$ENV_DIR"
+set_env() { printf "%s" "$2" > "$ENV_DIR/$1"; export "$1"="$2"; }
+
+# Core bridge env
+set_env NB_CLOUD_PREFIX "${NB_CLOUD_PREFIX}"
+set_env NB_TOPIC_PREFIX  "${NB_TOPIC_PREFIX}"
+set_env NB_DISCOVERY_PREFIX "${NB_DISCOVERY_PREFIX}"
+set_env NB_RETAIN "${NB_RETAIN}"
+set_env NB_DEBUG "${NB_DEBUG}"
+
+# Local broker credentials/port
+set_env NB_MQTT_USER "${NB_MQTT_USER}"
+set_env NB_MQTT_PASS "${NB_MQTT_PASS}"
+set_env NB_MQTT_PORT "${NB_MQTT_PORT:-${MQTT_PORT:-2883}}"
