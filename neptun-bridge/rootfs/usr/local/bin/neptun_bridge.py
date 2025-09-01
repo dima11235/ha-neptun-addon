@@ -412,7 +412,8 @@ def on_connect(c, userdata, flags, rc):
         c.subscribe(f"{CLOUD_PREFIX}/+/from", qos=0)
     else:
         c.subscribe("+/+/from", qos=0)
-        c.subscribe("#", qos=0)
+        if DEBUG:
+            c.subscribe("#", qos=0)
     # Команды от HA
     c.subscribe(f"{TOPIC_PREFIX}/+/cmd/#", qos=0)
     try:
