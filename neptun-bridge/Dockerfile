@@ -1,4 +1,5 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.19
+ARG BUILD_ARCH
+ARG BUILD_FROM=ghcr.io/home-assistant/${BUILD_ARCH}-base:3.19
 FROM ${BUILD_FROM}
 
 # Python + mosquitto
@@ -17,6 +18,11 @@ RUN chmod +x /etc/cont-init.d/*.sh \
 ENV PYTHONUNBUFFERED=1
 
 # Mosquitto порт
+# EXPOSE is informational only. The actual Mosquitto listener port
+# is set from add-on options (`mqtt.listen_port`) by
+# `rootfs/etc/cont-init.d/10-mosquitto.sh` into `mosquitto.conf`.
+# With `host_network: true`, Docker port publishing is unused by HA;
+# EXPOSE documents the default (2883) and helps tooling only.
 EXPOSE 2883
 
 # s6 запускает всё сам
