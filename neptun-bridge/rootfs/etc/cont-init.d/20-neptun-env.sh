@@ -8,6 +8,9 @@ export NB_DISCOVERY_PREFIX=$(jq -r '.bridge.discovery_prefix' "$OPTIONS")
 export NB_RETAIN=$(jq -r '.bridge.retain' "$OPTIONS")
 export NB_DEBUG=$(jq -r '.bridge.debug' "$OPTIONS")
 
+# Local broker port for python client
+export NB_MQTT_PORT=$(jq -r '.mqtt.listen_port' "$OPTIONS")
+
 # Local MQTT auth for python (mirror mosquitto anon setting)
 if grep -q "^allow_anonymous[[:space:]]\+false" /etc/mosquitto/mosquitto.conf; then
   export NB_MQTT_USER=$(jq -r '.mqtt.user' "$OPTIONS")

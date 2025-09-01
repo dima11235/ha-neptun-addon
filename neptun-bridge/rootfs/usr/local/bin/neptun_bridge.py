@@ -10,7 +10,8 @@ RETAIN_DEFAULT = os.getenv("NB_RETAIN", "true").lower() == "true"
 DEBUG          = os.getenv("NB_DEBUG", "false").lower() == "true"
 
 MQTT_HOST = "127.0.0.1"
-MQTT_PORT = int(os.getenv("MQTT_LISTEN_PORT", "2883"))
+# Prefer NB_MQTT_PORT (from options), fallback to MQTT_LISTEN_PORT
+MQTT_PORT = int(os.getenv("NB_MQTT_PORT") or os.getenv("MQTT_LISTEN_PORT", "2883"))
 MQTT_USER = os.getenv("NB_MQTT_USER", None) or None
 MQTT_PASS = os.getenv("NB_MQTT_PASS", None) or None
 
@@ -388,12 +389,15 @@ def on_connect(c, userdata, flags, rc):
         c.subscribe(f"{CLOUD_PREFIX}/+/from", qos=0)
     else:
         c.subscribe("+/+/from", qos=0)
+        c.subscribe("#", qos=0)
     # Команды от HA
     c.subscribe(f"{TOPIC_PREFIX}/+/cmd/#", qos=0)
 
 def on_message(c, userdata, msg):
     try:
         t = msg.topic
+        if DEBUG:
+            log("RX", t)
         if t.endswith("/from") and t.count("/") >= 2:
             # mac из топика 14cb.../<MAC>/from
             mac = t.split("/")[1]
