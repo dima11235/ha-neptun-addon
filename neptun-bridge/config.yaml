@@ -1,0 +1,45 @@
+name: "Neptun Local Bridge (MQTT + parser)"
+version: "0.1.0"
+slug: neptun-bridge
+description: "Локальный брокер MQTT и мост для Neptun (раскладка бинарных пакетов + MQTT Discovery)"
+url: "https://github.com/dima11235/ha-neptun-addon"
+arch:
+  - amd64
+  - aarch64
+  - armv7
+startup: services
+boot: auto
+host_network: true
+ingress: false
+init: false
+uart: false
+tmpfs: false
+map:
+  - config:rw
+  - share:rw
+options:
+  mqtt:
+    listen_port: 2883
+    allow_anonymous: true
+    user: ""
+    password: ""
+  bridge:
+    cloud_prefix: "14cb98a541"
+    topic_prefix: "neptun"
+    discovery_prefix: "homeassistant"
+    retain: true
+    debug: false
+schema:
+  mqtt:
+    listen_port: int
+    allow_anonymous: bool
+    user: str
+    password: str
+  bridge:
+    cloud_prefix: str
+    topic_prefix: str
+    discovery_prefix: str
+    retain: bool
+    debug: bool
+services:
+  - mqtt:provide
