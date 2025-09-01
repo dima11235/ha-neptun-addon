@@ -26,8 +26,8 @@ options:
   ha_mqtt:
     host: "core-mosquitto"
     port: 1883
-    user: ""
-    password: ""
+    user: "!secret mqtt_user"
+    password: "!secret mqtt_password"
   bridge:
     cloud_prefix: "14cb98a541"
     topic_prefix: "neptun"
