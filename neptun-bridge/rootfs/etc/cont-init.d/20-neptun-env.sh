@@ -9,7 +9,7 @@ export NB_RETAIN=$(jq -r '.bridge.retain' "$OPTIONS")
 export NB_DEBUG=$(jq -r '.bridge.debug' "$OPTIONS")
 
 # Local MQTT auth for python (mirror mosquitto anon setting)
-if grep -q "false" /etc/mosquitto/mosquitto.conf | grep -q allow_anonymous; then
+if grep -q "^allow_anonymous[[:space:]]\+false" /etc/mosquitto/mosquitto.conf; then
   export NB_MQTT_USER=$(jq -r '.mqtt.user' "$OPTIONS")
   export NB_MQTT_PASS=$(jq -r '.mqtt.password' "$OPTIONS")
 else

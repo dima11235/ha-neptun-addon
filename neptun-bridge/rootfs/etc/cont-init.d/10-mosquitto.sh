@@ -89,8 +89,9 @@ fi
 
 # Render placeholders in mosquitto.conf (listener / allow_anonymous)
 CONF="/etc/mosquitto/mosquitto.conf"
-sed -i -E "s#\$\{MQTT_LISTEN_PORT\}#${MQTT_LISTEN_PORT}#g" "$CONF"
-sed -i -E "s#\$\{MQTT_ALLOW_ANON\}#${MQTT_ALLOW_ANON}#g" "$CONF"
+# Use basic sed (BusyBox compatible)
+sed -i "s|\${MQTT_LISTEN_PORT}|${MQTT_LISTEN_PORT}|g" "$CONF"
+sed -i "s|\${MQTT_ALLOW_ANON}|${MQTT_ALLOW_ANON}|g" "$CONF"
 
 # Configure bridge to HA broker if credentials provided
 if [ -n "$HA_HOST" ] && [ "$HA_HOST" != "null" ] \
