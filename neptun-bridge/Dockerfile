@@ -17,6 +17,6 @@ RUN chmod +x /etc/cont-init.d/*.sh \
 ENV PYTHONUNBUFFERED=1
 
 # Mosquitto порт
-EXPOSE 1883
+EXPOSE 2883
 
 # s6 запускает всё сам

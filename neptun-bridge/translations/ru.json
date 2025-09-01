@@ -1,0 +1,17 @@
+{
+  "title": "Neptun Local Bridge (MQTT + парсер)",
+  "config": {
+    "mqtt": "Настройки брокера MQTT",
+    "mqtt.listen_port": "Порт прослушивания MQTT",
+    "mqtt.allow_anonymous": "Разрешить анонимные клиенты",
+    "mqtt.user": "Имя пользователя MQTT",
+    "mqtt.password": "Пароль MQTT",
+    "bridge": "Настройки моста",
+    "bridge.cloud_prefix": "Префикс облачных топиков",
+    "bridge.topic_prefix": "Локальный префикс топиков",
+    "bridge.discovery_prefix": "Префикс discovery Home Assistant",
+    "bridge.retain": "Retain-сообщения",
+    "bridge.debug": "Отладочное логирование"
+  }
+}
+

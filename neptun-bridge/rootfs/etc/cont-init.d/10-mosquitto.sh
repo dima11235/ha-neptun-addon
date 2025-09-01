@@ -9,6 +9,42 @@ MQTT_USER=$(jq -r '.mqtt.user' "$OPTIONS")
 MQTT_PASS=$(jq -r '.mqtt.password' "$OPTIONS")
 MQTT_ANON=$(jq -r '.mqtt.allow_anonymous' "$OPTIONS")
 
+# HA MQTT bridge settings
+HA_HOST=$(jq -r '.ha_mqtt.host' "$OPTIONS")
+HA_PORT=$(jq -r '.ha_mqtt.port' "$OPTIONS")
+HA_USER=$(jq -r '.ha_mqtt.user' "$OPTIONS")
+HA_PASS=$(jq -r '.ha_mqtt.password' "$OPTIONS")
+BR_TOPIC_PREFIX=$(jq -r '.bridge.topic_prefix' "$OPTIONS")
+BR_DISC_PREFIX=$(jq -r '.bridge.discovery_prefix' "$OPTIONS")
+
+# Defaults for HA broker if unset
+if [ -z "$HA_HOST" ] || [ "$HA_HOST" = "null" ]; then HA_HOST="core-mosquitto"; fi
+if [ -z "$HA_PORT" ] || [ "$HA_PORT" = "null" ]; then HA_PORT="1883"; fi
+
+# Resolve !secret values from /config/secrets.yaml
+resolve_secret() {
+  local val="$1"
+  if [[ "$val" =~ ^!secret[[:space:]]+([A-Za-z0-9_]+)$ ]]; then
+    local key="${BASH_REMATCH[1]}"
+    if [ -f /config/secrets.yaml ]; then
+      local line
+      line=$(grep -E "^[[:space:]]*$key:[[:space:]]*" /config/secrets.yaml | head -n1 || true)
+      if [ -n "$line" ]; then
+        echo "$line" | sed -E "s/^[^:]+:[[:space:]]*//" | sed -E "s/^['\"]?(.*)['\"]?$/\1/"
+        return 0
+      fi
+    fi
+    echo ""; return 0
+  fi
+  echo "$val"
+}
+
+# Apply secret resolution
+MQTT_USER=$(resolve_secret "$MQTT_USER")
+MQTT_PASS=$(resolve_secret "$MQTT_PASS")
+HA_USER=$(resolve_secret "$HA_USER")
+HA_PASS=$(resolve_secret "$HA_PASS")
+
 # Экспортируем для mosquitto.conf
 export MQTT_LISTEN_PORT="${MQTT_PORT:-1883}"
 
@@ -22,4 +58,30 @@ if [ -n "$MQTT_USER" ] && [ "$MQTT_USER" != "null" ] && [ -n "$MQTT_PASS" ] && [
   fi
 else
   export MQTT_ALLOW_ANON="${MQTT_ANON:-true}"
+fi
+
+# Configure bridge to HA broker if credentials provided
+if [ -n "$HA_HOST" ] && [ "$HA_HOST" != "null" ] \
+   && [ -n "$HA_PORT" ] && [ "$HA_PORT" != "null" ] \
+   && [ -n "$HA_USER" ] && [ "$HA_USER" != "null" ] \
+   && [ -n "$HA_PASS" ] && [ "$HA_PASS" != "null" ]; then
+  # remove previous block if present
+  sed -i '/^# BEGIN ha_bridge/,/^# END ha_bridge/d' /etc/mosquitto/mosquitto.conf || true
+  cat >> /etc/mosquitto/mosquitto.conf <<EOF
+# BEGIN ha_bridge
+connection ha_bridge
+address ${HA_HOST}:${HA_PORT}
+remote_username ${HA_USER}
+remote_password ${HA_PASS}
+cleansession true
+start_type automatic
+notifications false
+try_private false
+# publish device topics and discovery to HA
+topic ${BR_TOPIC_PREFIX}/# out 0
+topic ${BR_DISC_PREFIX}/# out 0
+# receive commands from HA
+topic ${BR_TOPIC_PREFIX}/+/cmd/# in 0
+# END ha_bridge
+EOF
 fi

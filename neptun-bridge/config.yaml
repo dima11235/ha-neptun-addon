@@ -23,6 +23,11 @@ options:
     allow_anonymous: true
     user: ""
     password: ""
+  ha_mqtt:
+    host: "core-mosquitto"
+    port: 1883
+    user: ""
+    password: ""
   bridge:
     cloud_prefix: "14cb98a541"
     topic_prefix: "neptun"
@@ -33,6 +38,11 @@ schema:
   mqtt:
     listen_port: int
     allow_anonymous: bool
+    user: str
+    password: str
+  ha_mqtt:
+    host: str
+    port: int
     user: str
     password: str
   bridge:
