@@ -45,6 +45,33 @@ MQTT_PASS=$(resolve_secret "$MQTT_PASS")
 HA_USER=$(resolve_secret "$HA_USER")
 HA_PASS=$(resolve_secret "$HA_PASS")
 
+# Optional: read direct secrets keys if present (fallbacks)
+get_secret() {
+  local key="$1"
+  if [ -f /config/secrets.yaml ]; then
+    local line
+    line=$(grep -E "^[[:space:]]*$key:[[:space:]]*" /config/secrets.yaml | head -n1 || true)
+    if [ -n "$line" ]; then
+      echo "$line" | sed -E "s/^[^:]+:[[:space:]]*//" | sed -E "s/^['\"]?(.*)['\"]?$/\1/"
+      return 0
+    fi
+  fi
+  echo ""
+}
+
+# If mqtt_server secret exists, parse and override HA_HOST/HA_PORT
+SECRET_MQTT_SERVER=$(get_secret mqtt_server)
+if [ -n "$SECRET_MQTT_SERVER" ]; then
+  # expected like mqtt://host:port
+  srv=${SECRET_MQTT_SERVER#mqtt://}
+  HA_HOST=${srv%%:*}
+  HA_PORT=${srv##*:}
+fi
+
+# Username/password fallbacks from secrets if not set via options
+if [ -z "$HA_USER" ] || [ "$HA_USER" = "null" ]; then HA_USER=$(get_secret mqtt_username); fi
+if [ -z "$HA_PASS" ] || [ "$HA_PASS" = "null" ]; then HA_PASS=$(get_secret mqtt_password); fi
+
 # Экспортируем для mosquitto.conf
 export MQTT_LISTEN_PORT="${MQTT_PORT:-1883}"
 

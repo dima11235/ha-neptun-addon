@@ -45,3 +45,26 @@ if [ -n "$NB_MQTT_USER" ]; then export NB_MQTT_USER=$(resolve_secret "$NB_MQTT_U
 if [ -n "$NB_MQTT_PASS" ]; then export NB_MQTT_PASS=$(resolve_secret "$NB_MQTT_PASS"); fi
 if [ -n "$NB_HA_MQTT_USER" ]; then export NB_HA_MQTT_USER=$(resolve_secret "$NB_HA_MQTT_USER"); fi
 if [ -n "$NB_HA_MQTT_PASS" ]; then export NB_HA_MQTT_PASS=$(resolve_secret "$NB_HA_MQTT_PASS"); fi
+
+# Direct secrets fallback (mqtt_server / mqtt_username / mqtt_password)
+get_secret() {
+  local key="$1"
+  if [ -f /config/secrets.yaml ]; then
+    local line
+    line=$(grep -E "^[[:space:]]*$key:[[:space:]]*" /config/secrets.yaml | head -n1 || true)
+    if [ -n "$line" ]; then
+      echo "$line" | sed -E "s/^[^:]+:[[:space:]]*//" | sed -E "s/^['\"]?(.*)['\"]?$/\1/"
+      return 0
+    fi
+  fi
+  echo ""
+}
+
+SECRET_MQTT_SERVER=$(get_secret mqtt_server)
+if [ -n "$SECRET_MQTT_SERVER" ]; then
+  srv=${SECRET_MQTT_SERVER#mqtt://}
+  export NB_HA_MQTT_HOST=${srv%%:*}
+  export NB_HA_MQTT_PORT=${srv##*:}
+fi
+if [ -z "$NB_HA_MQTT_USER" ] || [ "$NB_HA_MQTT_USER" = "null" ]; then export NB_HA_MQTT_USER=$(get_secret mqtt_username); fi
+if [ -z "$NB_HA_MQTT_PASS" ] || [ "$NB_HA_MQTT_PASS" = "null" ]; then export NB_HA_MQTT_PASS=$(get_secret mqtt_password); fi

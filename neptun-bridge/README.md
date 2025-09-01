@@ -23,7 +23,7 @@ mqtt:
 ha_mqtt:
   host: core-mosquitto       # Брокер HA (по умолчанию core-mosquitto)
   port: 1883                 # Порт брокера HA
-  user: "!secret mqtt_user"  # Пользователь HA MQTT (поддерживается !secret)
+  user: "!secret mqtt_username"  # Пользователь HA MQTT (поддерживается !secret)
   password: "!secret mqtt_password"  # Пароль HA MQTT (поддерживается !secret)
 bridge:
   cloud_prefix: ""           # Пусто — автодискавери; если указано — используется принудительно
@@ -41,10 +41,12 @@ bridge:
 Secrets
 - В полях `mqtt.user/password` и `ha_mqtt.user/password` можно использовать `!secret KEY`.
 - Значения читаются из файла `/config/secrets.yaml` (через Supervisor у аддона есть доступ к `/config`).
+- Дополнительно поддерживается единая запись `mqtt_server: mqtt://<host>:<port>` — при наличии переопределяет `ha_mqtt.host/port`.
 - Пример `secrets.yaml`:
 ```
-mqtt_user: myuser
+mqtt_username: myuser
 mqtt_password: mypass
+mqtt_server: mqtt://core-mosquitto:1883
 ```
 
 Сетевое взаимодействие
