@@ -153,6 +153,12 @@ def pub(topic, payload, retain=None, qos=0):
     if retain is None: retain = RETAIN_DEFAULT
     if isinstance(payload, (dict, list)):
         payload = json.dumps(payload, ensure_ascii=False)
+    if DEBUG:
+        try:
+            plen = (len(payload) if isinstance(payload, (bytes, bytearray)) else len(str(payload)))
+        except Exception:
+            plen = 0
+        print("[BRIDGE]","PUB", topic, f"len={plen}", f"retain={retain}", file=sys.stderr, flush=True)
     client.publish(topic, payload, qos=qos, retain=retain)
 
 def publish_raw(mac, buf: bytes):
@@ -392,6 +398,8 @@ def on_connect(c, userdata, flags, rc):
         c.subscribe("#", qos=0)
     # Команды от HA
     c.subscribe(f"{TOPIC_PREFIX}/+/cmd/#", qos=0)
+    if DEBUG:
+        print("[BRIDGE]","Subscribed:", f"{CLOUD_PREFIX or '+/+'}/from and {TOPIC_PREFIX}/+/cmd/#", file=sys.stderr, flush=True)
 
 def on_message(c, userdata, msg):
     try:
@@ -467,6 +475,8 @@ def main():
     backoff = 1
     while True:
         try:
+            if DEBUG:
+                print("[BRIDGE]", "Connecting to", MQTT_HOST, MQTT_PORT, "user=", bool(MQTT_USER), file=sys.stderr, flush=True)
             if MQTT_USER and MQTT_PASS:
                 client.username_pw_set(MQTT_USER, MQTT_PASS)
             client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
