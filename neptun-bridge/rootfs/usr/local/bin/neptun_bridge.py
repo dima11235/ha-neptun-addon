@@ -279,8 +279,9 @@ def ensure_discovery(mac):
             "value_template": "{{ value | float / 1000 }}",
             "device": device
         }
-        # Ensure proper unicode unit for cubic meters
+        # Ensure proper unicode unit for cubic meters and neutral name
         confM["unit_of_measurement"] = "m\u00B3"
+        confM["name"] = f"Counter {i}"
         pub(f"{DISCOVERY_PRE}/sensor/{sidM}/config", confM, retain=True)
 
         # Step in liters per pulse (L/pulse)
