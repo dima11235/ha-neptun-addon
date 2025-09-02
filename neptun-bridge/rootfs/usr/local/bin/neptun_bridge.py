@@ -478,8 +478,6 @@ def publish_system(mac_from_topic, buf: bytes):
         val = int(c.get("value",0)); step = int(c.get("step",1)) or 1
         pub(f"{base}/counters/line_{idx}/value", val, retain=False)
         pub(f"{base}/counters/line_{idx}/step", step, retain=False)
-        liters = val
-        pub(f"{base}/counters/line_{idx}/liters", liters, retain=False)
         # derived: liters per pulse if step is pulses-per-liter
         try:
             step_liters = (1.0/step) if step else 0.0
