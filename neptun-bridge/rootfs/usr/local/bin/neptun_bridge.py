@@ -263,6 +263,8 @@ def publish_system(mac_from_topic, buf: bytes):
     st = parse_system_state(buf)
     mac = st.get("mac", mac_from_topic)
     base = f"{TOPIC_PREFIX}/{mac}"
+    safe_mac = mac.replace(":", "_").replace("-", "_").lower()
+    dev_id = f"neptun_{safe_mac}"
 
     publish_raw(mac, buf)
     ensure_discovery(mac)
@@ -289,15 +291,16 @@ def publish_system(mac_from_topic, buf: bytes):
         pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", s["signal_level"], retain=False)
         pub(f"{base}/sensors_status/{s['sensor_id']}/attention", 1 if s["leak"] else 0, retain=False)
         # discovery для leak как binary_sensor
-        obj_id = f"neptun_{mac}_leak_{s['sensor_id']}"
+        # sanitize object_id and identifiers for HA discovery
+        obj_id = f"neptun_{safe_mac}_leak_{s['sensor_id']}"
         conf = {
             "name": f"Leak {s['sensor_id']}",
-            "unique_id": obj_id.replace(":","_").replace("-","_").lower(),
+            "unique_id": obj_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attention",
             "payload_on": "1", "payload_off": "0",
             "device_class": "moisture",
             "device": {
-                "identifiers":[f"neptun_{mac}".replace(":","_").replace("-","_").lower()],
+                "identifiers":[dev_id],
                 "manufacturer":"Neptun","model":"AquaControl","name":f"Neptun {mac}"
             }
         }
