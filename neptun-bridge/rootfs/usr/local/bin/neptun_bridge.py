@@ -368,12 +368,12 @@ def publish_system(mac_from_topic, buf: bytes):
     if sensors_status: parsedCfg["sensors_status"] = sensors_status
     pub(f"{base}/config/json", parsedCfg, retain=True)
 
-    # counters: value/step + liters
+    # counters: value уже в литрах; liters = value
     for idx, c in enumerate(st.get("counters", []), start=1):
         val = int(c.get("value",0)); step = int(c.get("step",1)) or 1
         pub(f"{base}/counters/line_{idx}/value", val, retain=False)
         pub(f"{base}/counters/line_{idx}/step", step, retain=False)
-        liters = round(val/step, 3)
+        liters = val
         pub(f"{base}/counters/line_{idx}/liters", liters, retain=False)
 
     # state/*
