@@ -215,45 +215,45 @@ def ensure_discovery(mac):
         "model": "AquaControl",
         "name": f"Neptun {mac}"
     }
+    # sanitize MAC for discovery ids (avoid colons)
+    safe_mac = mac.replace(":", "_").replace("-", "_").lower()
+    dev_id = f"neptun_{safe_mac}"
+    device["identifiers"] = [dev_id]
     # Клапан как MQTT switch (простая совместимость)
-    obj_id = f"neptun_{mac}_valve"
+    obj_id = f"neptun_{safe_mac}_valve"
     conf = {
         "name": "Neptun Valve",
-        "uniq_id": obj_id,
-        "cmd_t": f"~cmd/valve/set",
-        "stat_t": f"~state/valve_open",
-        "pl_on": "1",
-        "pl_off": "0",
+        "unique_id": obj_id,
+        "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/valve/set",
+        "state_topic": f"{TOPIC_PREFIX}/{mac}/state/valve_open",
+        "payload_on": "1",
+        "payload_off": "0",
         "qos": 0,
         "retain": False,
-        "dev": device,
-        "~": f"{TOPIC_PREFIX}/{mac}/"
+        "device": device
     }
     pub(f"{DISCOVERY_PRE}/switch/{obj_id}/config", conf, retain=True)
 
     # Счетчики (литры как value/step)
     for i in range(1,5):
-        sid = f"neptun_{mac}_counter_{i}"
+        sid = f"neptun_{safe_mac}_counter_{i}"
         conf = {
             "name": f"Counter line {i} (raw)",
-            "uniq_id": sid,
-            "stat_t": f"~counters/line_{i}/value",
-            "dev_cla": "measurement",
-            "unit_of_meas": "pulse",
-            "dev": device,
-            "~": f"{TOPIC_PREFIX}/{mac}/"
+            "unique_id": sid,
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/value",
+            "unit_of_measurement": "pulse",
+            "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{sid}/config", conf, retain=True)
         # Литры (derived)
-        sidL = f"neptun_{mac}_liters_{i}"
+        sidL = f"neptun_{safe_mac}_liters_{i}"
         confL = {
             "name": f"Counter line {i} (liters)",
-            "uniq_id": sidL,
-            "stat_t": f"~counters/line_{i}/liters",
-            "dev_cla": "water",
-            "unit_of_meas": "L",
-            "dev": device,
-            "~": f"{TOPIC_PREFIX}/{mac}/"
+            "unique_id": sidL,
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/liters",
+            "device_class": "water",
+            "unit_of_measurement": "L",
+            "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{sidL}/config", confL, retain=True)
 
@@ -292,29 +292,27 @@ def publish_system(mac_from_topic, buf: bytes):
         obj_id = f"neptun_{mac}_leak_{s['sensor_id']}"
         conf = {
             "name": f"Leak {s['sensor_id']}",
-            "uniq_id": obj_id,
-            "stat_t": f"~sensors_status/{s['sensor_id']}/attention",
-            "pl_on": "1", "pl_off": "0",
-            "dev_cla": "moisture",
-            "dev": {
-                "identifiers":[f"neptun_{mac}"],
+            "unique_id": obj_id.replace(":","_").replace("-","_").lower(),
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attention",
+            "payload_on": "1", "payload_off": "0",
+            "device_class": "moisture",
+            "device": {
+                "identifiers":[f"neptun_{mac}".replace(":","_").replace("-","_").lower()],
                 "manufacturer":"Neptun","model":"AquaControl","name":f"Neptun {mac}"
-            },
-            "~": f"{TOPIC_PREFIX}/{mac}/"
+            }
         }
         pub(f"{DISCOVERY_PRE}/binary_sensor/{obj_id}/config", conf, retain=True)
 
         # батарея/сигнал (обычные sensors)
         for what, name, unit in (("battery","Battery","%"), ("signal_level","Signal","")):
-            sid = f"neptun_{mac}_{what}_{s['sensor_id']}"
+            sid = f"neptun_{mac}_{what}_{s['sensor_id']}".replace(":","_").replace("-","_").lower()
             conf2 = {
                 "name": f"{name} {s['sensor_id']}",
-                "uniq_id": sid,
-                "stat_t": f"~sensors_status/{s['sensor_id']}/{what}",
-                "dev": {"identifiers":[f"neptun_{mac}"]},
-                "~": f"{TOPIC_PREFIX}/{mac}/"
+                "unique_id": sid,
+                "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/{what}",
+                "device": {"identifiers":[f"neptun_{mac}".replace(":","_").replace("-","_").lower()]}
             }
-            if unit: conf2["unit_of_meas"] = unit
+            if unit: conf2["unit_of_measurement"] = unit
             pub(f"{DISCOVERY_PRE}/sensor/{sid}/config", conf2, retain=True)
 
     if sensors_status:
