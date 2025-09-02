@@ -124,6 +124,16 @@ def parse_system_state(buf: bytes) -> dict:
                     "leak_state": leak
                 })
             out["wireless_sensors"] = arr
+        elif tag == 0x4C: # 'L' -> wired leak lines
+            # Accept either 4 bytes (one per line) or 1-byte bitmask (low 4 bits)
+            try:
+                if len(v) >= 4:
+                    out["wired_states"] = [bool(v[i]) for i in range(4)]
+                elif len(v) >= 1:
+                    m = v[0]
+                    out["wired_states"] = [bool((m >> i) & 1) for i in range(4)]
+            except Exception:
+                pass
         elif tag == 0x43: # counters per line: 4B BE + 1B step
             cs = []
             for j in range(0, len(v)//5*5, 5):
