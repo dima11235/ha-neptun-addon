@@ -479,11 +479,7 @@ def publish_system(mac_from_topic, buf: bytes):
         pub(f"{base}/counters/line_{idx}/value", val, retain=False)
         pub(f"{base}/counters/line_{idx}/step", step, retain=False)
         # derived: liters per pulse if step is pulses-per-liter
-        try:
-            step_liters = (1.0/step) if step else 0.0
-        except Exception:
-            step_liters = 0.0
-        pub(f"{base}/counters/line_{idx}/step_liters", round(step_liters, 6), retain=False)
+        # do not publish step_liters; step already reports raw setting
 
     # state/*
     pub(f"{base}/state/json", st, retain=False)
