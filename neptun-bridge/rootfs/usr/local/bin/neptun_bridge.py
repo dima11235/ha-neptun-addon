@@ -257,6 +257,20 @@ def ensure_discovery(mac):
         }
         pub(f"{DISCOVERY_PRE}/sensor/{sidL}/config", confL, retain=True)
 
+        # Derived: cubic meters from liters via value_template
+        sidM = f"neptun_{safe_mac}_m3_{i}"
+        confM = {
+            "name": f"Counter line {i} (m³)",
+            "unique_id": sidM,
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/liters",
+            "device_class": "water",
+            "unit_of_measurement": "m³",
+            "state_class": "total",
+            "value_template": "{{ value | float / 1000 }}",
+            "device": device
+        }
+        pub(f"{DISCOVERY_PRE}/sensor/{sidM}/config", confM, retain=True)
+
     # Additional binary sensors matching Node-RED flow
     base_topic = f"{TOPIC_PREFIX}/{mac}"
     # Overall leak detected
