@@ -170,6 +170,16 @@ def pub(topic, payload, retain=None, qos=0):
     if retain is None: retain = RETAIN_DEFAULT
     if isinstance(payload, (dict, list)):
         payload = json.dumps(payload, ensure_ascii=False)
+    # Suppress legacy counter discovery (raw pulses and liters) — keep only m3 sensors
+    try:
+        if isinstance(payload, str) and topic.startswith(f"{DISCOVERY_PRE}/sensor/"):
+            # quick check: infer by keywords in payload
+            if '"unit_of_measurement": "pulse"' in payload:
+                return
+            if '"unit_of_measurement": "L"' in payload and 'value_template' not in payload:
+                return
+    except Exception:
+        pass
     if DEBUG:
         try:
             plen = (len(payload) if isinstance(payload, (bytes, bytearray)) else len(str(payload)))
