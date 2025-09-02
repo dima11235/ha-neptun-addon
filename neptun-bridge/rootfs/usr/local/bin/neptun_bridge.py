@@ -281,6 +281,17 @@ def ensure_discovery(mac):
         }
         pub(f"{DISCOVERY_PRE}/sensor/{sidM}/config", confM, retain=True)
 
+        # Step in liters per pulse (L/pulse)
+        sidS = f"neptun_{safe_mac}_counter_{i}_step_liters"
+        confS = {
+            "name": f"Counter {i} step (L/pulse)",
+            "unique_id": sidS,
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/step_liters",
+            "unit_of_measurement": "L/pulse",
+            "device": device
+        }
+        pub(f"{DISCOVERY_PRE}/sensor/{sidS}/config", confS, retain=True)
+
     # Additional binary sensors matching Node-RED flow
     base_topic = f"{TOPIC_PREFIX}/{mac}"
     # Overall leak detected
@@ -466,6 +477,12 @@ def publish_system(mac_from_topic, buf: bytes):
         pub(f"{base}/counters/line_{idx}/step", step, retain=False)
         liters = val
         pub(f"{base}/counters/line_{idx}/liters", liters, retain=False)
+        # derived: liters per pulse if step is pulses-per-liter
+        try:
+            step_liters = (1.0/step) if step else 0.0
+        except Exception:
+            step_liters = 0.0
+        pub(f"{base}/counters/line_{idx}/step_liters", round(step_liters, 6), retain=False)
 
     # state/*
     pub(f"{base}/state/json", st, retain=False)
