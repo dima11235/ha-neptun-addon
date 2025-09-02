@@ -257,6 +257,73 @@ def ensure_discovery(mac):
         }
         pub(f"{DISCOVERY_PRE}/sensor/{sidL}/config", confL, retain=True)
 
+    # Additional binary sensors matching Node-RED flow
+    base_topic = f"{TOPIC_PREFIX}/{mac}"
+    # Overall leak detected
+    leak_id = f"neptun_{safe_mac}_leak_detected"
+    leak_conf = {
+        "name": "Leak Detected",
+        "unique_id": leak_id,
+        "state_topic": f"{base_topic}/settings/status/alert",
+        "payload_on": "on",
+        "payload_off": "off",
+        "device_class": "problem",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/binary_sensor/{leak_id}/config", leak_conf, retain=True)
+
+    # Valve Closed (inverse of valve_open)
+    valve_closed_id = f"neptun_{safe_mac}_valve_closed"
+    valve_closed_conf = {
+        "name": "Valve Closed",
+        "unique_id": valve_closed_id,
+        "state_topic": f"{base_topic}/state/valve_open",
+        "payload_on": "0",
+        "payload_off": "1",
+        "device_class": "problem",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/binary_sensor/{valve_closed_id}/config", valve_closed_conf, retain=True)
+
+    # Module Battery Discharged
+    mod_batt_id = f"neptun_{safe_mac}_module_battery_discharged"
+    mod_batt_conf = {
+        "name": "Module Battery Discharged",
+        "unique_id": mod_batt_id,
+        "state_topic": f"{base_topic}/settings/status/battery_discharge_in_module",
+        "payload_on": "yes",
+        "payload_off": "no",
+        "device_class": "battery",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_batt_id}/config", mod_batt_conf, retain=True)
+
+    # Sensors Battery Discharged
+    sens_batt_id = f"neptun_{safe_mac}_sensors_battery_discharged"
+    sens_batt_conf = {
+        "name": "Sensors Battery Discharged",
+        "unique_id": sens_batt_id,
+        "state_topic": f"{base_topic}/settings/status/battery_discharge_in_sensor",
+        "payload_on": "yes",
+        "payload_off": "no",
+        "device_class": "problem",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_batt_id}/config", sens_batt_conf, retain=True)
+
+    # Sensors Lost
+    sens_lost_id = f"neptun_{safe_mac}_sensors_lost"
+    sens_lost_conf = {
+        "name": "Sensors Lost",
+        "unique_id": sens_lost_id,
+        "state_topic": f"{base_topic}/settings/status/sensors_lost",
+        "payload_on": "yes",
+        "payload_off": "no",
+        "device_class": "problem",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_lost_id}/config", sens_lost_conf, retain=True)
+
     announced.add(mac)
 
 def publish_system(mac_from_topic, buf: bytes):
@@ -307,7 +374,7 @@ def publish_system(mac_from_topic, buf: bytes):
         pub(f"{DISCOVERY_PRE}/binary_sensor/{obj_id}/config", conf, retain=True)
 
         # батарея/сигнал (обычные sensors)
-        for what, name, unit in (("battery","Battery","%"), ("signal_level","Signal","")):
+        for what, name, unit in (("battery","Battery","%"), ("signal_level","Signal","lqi")):
             sid = f"neptun_{mac}_{what}_{s['sensor_id']}".replace(":","_").replace("-","_").lower()
             conf2 = {
                 "name": f"{name} {s['sensor_id']}",
