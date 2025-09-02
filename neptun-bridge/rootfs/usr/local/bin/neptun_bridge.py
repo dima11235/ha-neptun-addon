@@ -295,6 +295,31 @@ def ensure_discovery(mac):
         }
         pub(f"{DISCOVERY_PRE}/sensor/{sidS}/config", confS, retain=True)
 
+    # Wired leak sensors (lines 1..4)
+    for i in range(1,5):
+        wired_id = f"neptun_{safe_mac}_wired_{i}"
+        wired_conf = {
+            "name": f"Wired sensor {i}",
+            "unique_id": wired_id,
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/lines_status/line_{i}",
+            "payload_on": "on",
+            "payload_off": "off",
+            "device_class": "moisture",
+            "device": device
+        }
+        pub(f"{DISCOVERY_PRE}/binary_sensor/{wired_id}/config", wired_conf, retain=True)
+
+    # Line input type sensors (sensor/counter)
+    for i in range(1,5):
+        t_id = f"neptun_{safe_mac}_line_{i}_type"
+        t_conf = {
+            "name": f"Line {i} type",
+            "unique_id": t_id,
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/lines_in/line_{i}",
+            "device": device
+        }
+        pub(f"{DISCOVERY_PRE}/sensor/{t_id}/config", t_conf, retain=True)
+
     # Additional binary sensors matching Node-RED flow
     base_topic = f"{TOPIC_PREFIX}/{mac}"
     # Overall leak detected
@@ -478,6 +503,21 @@ def publish_system(mac_from_topic, buf: bytes):
         val = int(c.get("value",0)); step = int(c.get("step",1)) or 1
         pub(f"{base}/counters/line_{idx}/value", val, retain=False)
         pub(f"{base}/counters/line_{idx}/step", step, retain=False)
+
+    # Publish wired lines leak status (on/off)
+    wired = st.get("wired_states", [])
+    if wired:
+        for i in range(4):
+            stv = "on" if (i < len(wired) and wired[i]) else "off"
+            pub(f"{base}/lines_status/line_{i+1}", stv, retain=False)
+
+    # Publish line input types (sensor/counter)
+    li_map = map_lines_in(st.get("line_in_cfg", 0))
+    if li_map:
+        for i, key in enumerate(["line_1","line_2","line_3","line_4"], start=1):
+            raw = li_map.get(key, "wired_sensor")
+            val = "counter" if raw == "water_counter" else "sensor"
+            pub(f"{base}/lines_in/line_{i}", val, retain=True)
         # derived: liters per pulse if step is pulses-per-liter
         # do not publish step_liters; step already reports raw setting
 
