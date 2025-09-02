@@ -289,7 +289,6 @@ def ensure_discovery(mac):
             "name": f"Counter {i} step (L/pulse)",
             "unique_id": sidS,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/step",
-            "value_template": "{{ (1.0 / (value | float)) if (value | float) != 0 else 0.0 }}",
             "unit_of_measurement": "L/pulse",
             "device": device
         }
