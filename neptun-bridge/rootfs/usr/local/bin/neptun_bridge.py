@@ -268,11 +268,11 @@ def ensure_discovery(mac):
         pub(f"{DISCOVERY_PRE}/sensor/{sidL}/config", confL, retain=True)
 
         # Derived: cubic meters from liters via value_template
-        sidM = f"neptun_{safe_mac}_m3_{i}"
+        sidM = f"neptun_{safe_mac}_counter_{i}"
         confM = {
             "name": f"Counter line {i} (mВі)",
             "unique_id": sidM,
-            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/liters",
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/value",
             "device_class": "water",
             "unit_of_measurement": "mВі",
             "state_class": "total",
@@ -282,11 +282,12 @@ def ensure_discovery(mac):
         pub(f"{DISCOVERY_PRE}/sensor/{sidM}/config", confM, retain=True)
 
         # Step in liters per pulse (L/pulse)
-        sidS = f"neptun_{safe_mac}_counter_{i}_step_liters"
+        sidS = f"neptun_{safe_mac}_step_{i}"
         confS = {
             "name": f"Counter {i} step (L/pulse)",
             "unique_id": sidS,
-            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/step_liters",
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/step",
+            "value_template": "{{ (1.0 / (value | float)) if (value | float) != 0 else 0.0 }}",
             "unit_of_measurement": "L/pulse",
             "device": device
         }
