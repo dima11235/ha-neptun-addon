@@ -1,4 +1,10 @@
 #!/usr/bin/with-contenv bash
+#
+# Neptun Local Bridge — экспорт переменных окружения NB_*
+# - Читает значения из /data/options.json (и secrets.yaml при необходимости)
+# - Экспортирует NB_* для Python-моста
+# - Записывает значения в /var/run/s6/container_environment, чтобы они
+#   были доступны всем сервисам s6
 set -e
 OPTIONS="/data/options.json"
 
@@ -11,7 +17,7 @@ export NB_DEBUG=$(jq -r '.bridge.debug' "$OPTIONS")
 # Local broker port for python client
 export NB_MQTT_PORT=$(jq -r '.mqtt.listen_port' "$OPTIONS")
 
-# Local MQTT auth for python (mirror mosquitto anon setting)
+# Авторизация к локальному брокеру для Python (по настройке allow_anonymous)
 if grep -q "^allow_anonymous[[:space:]]\+false" /etc/mosquitto/mosquitto.conf; then
   export NB_MQTT_USER=$(jq -r '.mqtt.user' "$OPTIONS")
   export NB_MQTT_PASS=$(jq -r '.mqtt.password' "$OPTIONS")
@@ -20,13 +26,13 @@ else
   export NB_MQTT_PASS=""
 fi
 
-# HA MQTT connection (publish discovery + states, subscribe commands)
+# Подключение к HA MQTT (publish discovery + states, subscribe commands)
 export NB_HA_MQTT_HOST=$(jq -r '.ha_mqtt.host' "$OPTIONS")
 export NB_HA_MQTT_PORT=$(jq -r '.ha_mqtt.port' "$OPTIONS")
 export NB_HA_MQTT_USER=$(jq -r '.ha_mqtt.user' "$OPTIONS")
 export NB_HA_MQTT_PASS=$(jq -r '.ha_mqtt.password' "$OPTIONS")
 
-# Resolve !secret for HA/user/pass and local user/pass
+# Разрешение !secret для HA (user/pass) и локальных (user/pass)
 resolve_secret() {
   local val="$1"
   if [[ "$val" =~ ^!secret[[:space:]]+([A-Za-z0-9_]+)$ ]]; then
@@ -49,7 +55,7 @@ if [ -n "$NB_MQTT_PASS" ]; then export NB_MQTT_PASS=$(resolve_secret "$NB_MQTT_P
 if [ -n "$NB_HA_MQTT_USER" ]; then export NB_HA_MQTT_USER=$(resolve_secret "$NB_HA_MQTT_USER"); fi
 if [ -n "$NB_HA_MQTT_PASS" ]; then export NB_HA_MQTT_PASS=$(resolve_secret "$NB_HA_MQTT_PASS"); fi
 
-# Direct secrets fallback (mqtt_server / mqtt_username / mqtt_password)
+# Фоллбеки из secrets.yaml (mqtt_server / mqtt_username / mqtt_password)
 get_secret() {
   local key="$1"
   if [ -f /config/secrets.yaml ]; then
@@ -77,14 +83,14 @@ ENV_DIR="/var/run/s6/container_environment"
 mkdir -p "$ENV_DIR"
 set_env() { printf "%s" "$2" > "$ENV_DIR/$1"; export "$1"="$2"; }
 
-# Core bridge env
+# Базовые переменные моста (NB_*)
 set_env NB_CLOUD_PREFIX "${NB_CLOUD_PREFIX}"
 set_env NB_TOPIC_PREFIX  "${NB_TOPIC_PREFIX}"
 set_env NB_DISCOVERY_PREFIX "${NB_DISCOVERY_PREFIX}"
 set_env NB_RETAIN "${NB_RETAIN}"
 set_env NB_DEBUG "${NB_DEBUG}"
 
-# Local broker credentials/port
+# Учётные данные/порт локального брокера
 set_env NB_MQTT_USER "${NB_MQTT_USER}"
 set_env NB_MQTT_PASS "${NB_MQTT_PASS}"
 set_env NB_MQTT_PORT "${NB_MQTT_PORT:-${MQTT_PORT:-2883}}"

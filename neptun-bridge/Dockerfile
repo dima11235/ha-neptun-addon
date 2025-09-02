@@ -2,8 +2,13 @@ ARG BUILD_ARCH
 ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
+# Dockerfile для HA add-on: Neptun Local Bridge
+# - Базовый образ задаётся Supervisor через BUILD_FROM
+# - Устанавливаем Python 3, paho-mqtt из пакетов Alpine, mosquitto и инструменты
+# - Кладём rootfs/ (s6-overlay совместимый) и выставляем права
+
 # Python + mosquitto
-# Use Alpine package for paho-mqtt to avoid PEP 668 (externally managed env)
+# Используем пакетный py3-paho-mqtt, чтобы избежать PEP 668 (externally managed env)
 RUN apk add --no-cache python3 py3-paho-mqtt mosquitto mosquitto-clients runuser bash tzdata
 
 # s6 overlay уже в base образе от HA
@@ -18,11 +23,11 @@ RUN chmod +x /etc/cont-init.d/*.sh \
 ENV PYTHONUNBUFFERED=1
 
 # Mosquitto порт
-# EXPOSE is informational only. The actual Mosquitto listener port
-# is set from add-on options (`mqtt.listen_port`) by
-# `rootfs/etc/cont-init.d/10-mosquitto.sh` into `mosquitto.conf`.
-# With `host_network: true`, Docker port publishing is unused by HA;
-# EXPOSE documents the default (2883) and helps tooling only.
+# EXPOSE носит информативный характер. Реальный порт слушателя Mosquitto
+# задаётся опцией аддона (mqtt.listen_port) и подставляется скриптом
+# cont-init.d/10-mosquitto.sh в mosquitto.conf. Так как используется
+# host_network: true, публикация портов Docker не применяется; EXPOSE лишь
+# документирует дефолт (2883) и помогает вспомогательным инструментам.
 EXPOSE 2883
 
 # s6 запускает всё сам
