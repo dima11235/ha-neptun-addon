@@ -263,19 +263,68 @@ def ensure_discovery(mac):
     dev_id = f"neptun_{safe_mac}"
     device["identifiers"] = [dev_id]
     
-    obj_id = f"neptun_{safe_mac}_valve"
-    conf = {
-        "name": "Neptun Valve",
-        "unique_id": obj_id,
+    # Two stateless buttons for valve control
+    btn_open_id = f"neptun_{safe_mac}_valve_open"
+    btn_open_conf = {
+        "name": "Open Valve",
+        "unique_id": btn_open_id,
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/valve/set",
-        "state_topic": f"{TOPIC_PREFIX}/{mac}/state/valve_open",
-        "payload_on": "1",
-        "payload_off": "0",
+        "payload_press": "1",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/button/{btn_open_id}/config", btn_open_conf, retain=True)
+
+    btn_close_id = f"neptun_{safe_mac}_valve_close"
+    btn_close_conf = {
+        "name": "Close Valve",
+        "unique_id": btn_close_id,
+        "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/valve/set",
+        "payload_press": "0",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/button/{btn_close_id}/config", btn_close_conf, retain=True)
+    # Add MQTT switch for Dry Flag
+    obj_id2 = f"neptun_{safe_mac}_dry_flag"
+    conf2 = {
+        "name": "Dry Flag",
+        "unique_id": obj_id2,
+        "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/dry_flag/set",
+        "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/dry_flag",
+        "payload_on": "on",
+        "payload_off": "off",
         "qos": 0,
         "retain": False,
         "device": device
     }
-    pub(f"{DISCOVERY_PRE}/switch/{obj_id}/config", conf, retain=True)
+    pub(f"{DISCOVERY_PRE}/switch/{obj_id2}/config", conf2, retain=True)
+
+    # Add MQTT switch for Close On Offline
+    obj_id3 = f"neptun_{safe_mac}_close_on_offline"
+    conf3 = {
+        "name": "Close On Offline",
+        "unique_id": obj_id3,
+        "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/close_on_offline/set",
+        "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/close_valve_flag",
+        "payload_on": "close",
+        "payload_off": "open",
+        "qos": 0,
+        "retain": False,
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/switch/{obj_id3}/config", conf3, retain=True)
+
+    # Add MQTT selects for wired line types (sensor/counter)
+    for i in range(1,5):
+        sel_id = f"neptun_{safe_mac}_line_{i}_type"
+        sel_conf = {
+            "name": f"Line {i} type",
+            "unique_id": sel_id,
+            "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/line_{i}_type/set",
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/lines_in/line_{i}",
+            "options": ["sensor", "counter"],
+            "device": device
+        }
+        pub(f"{DISCOVERY_PRE}/select/{sel_id}/config", sel_conf, retain=True)
 
     
     for i in range(1,5):
@@ -303,11 +352,11 @@ def ensure_discovery(mac):
         # Derived: cubic meters from liters via value_template
         sidM = f"neptun_{safe_mac}_counter_{i}"
         confM = {
-            "name": f"Counter line {i} (m³)",
+            "name": f"Counter line {i} (mР вЂ™РЎвЂ“)",
             "unique_id": sidM,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/value",
             "device_class": "water",
-            "unit_of_measurement": "m³",
+            "unit_of_measurement": "mР вЂ™РЎвЂ“",
             "state_class": "total",
             "value_template": "{{ value | float / 1000 }}",
             "device": device
@@ -436,6 +485,7 @@ def publish_system(mac_from_topic, buf: bytes):
     
     prev = state_cache.get(mac, {})
     prev.update({
+        "valve_open": bool(st.get("valve_open", False)),
         "dry_flag": bool(st.get("dry_flag", False)),
         "flag_cl_valve": bool(st.get("flag_cl_valve", False)),
         "line_in_cfg": int(st.get("line_in_cfg", 0))
@@ -578,6 +628,21 @@ def publish_sensor_state(mac_from_topic, buf: bytes):
 
 # [BRIDGE DOC] Build 0x57 settings frame (valve/dry/close_on_offline/line_cfg) with CRC.
 def compose_settings_frame(open_valve: bool, dry=False, close_on_offline=False, line_cfg=0):
+    """Build a Neptun settings command frame (type 0x57).
+
+    Parameters:
+      - open_valve: True to open, False to close the valve.
+      - dry: Dry mode flag (mirrors settings/dry_flag).
+      - close_on_offline: Close valve when sensors/offline (flag_cl_valve).
+      - line_cfg: 4-bit mask for line inputs (bit0..bit3 -> lines 1..4).
+                  1 = counter, 0 = sensor; value range 0..15.
+
+    Returns:
+      - bytes ready to publish to <cloud_prefix>/<MAC>/to.
+
+    Frame layout:
+      02 54 51 57 00 07 53 00 04 VV DF CF LC CRC  (CRC16-CCITT, big-endian).
+    """
     # 02 54 51 57 00 07 53 00 04 VV DF CF LC CRC
     body = bytearray([0x02,0x54,0x51,0x57,0x00,0x07, 0x53,0x00,0x04, 0,0,0,0])
     body[9]  = 1 if open_valve else 0
@@ -674,6 +739,71 @@ def on_message(c, userdata, msg):
                     return
                 c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log("CMD valve ->", mac, "open" if want_open else "close")
+            elif cmd[:1] == ["dry_flag"]:
+                pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
+                up = pl.upper()
+                want_on = up in ("1","ON","OPEN","TRUE","YES") or pl.lower() == "on"
+                st = state_cache.get(mac, {})
+                frame = compose_settings_frame(
+                    open_valve=bool(st.get("valve_open", False)),
+                    dry=want_on,
+                    close_on_offline=bool(st.get("flag_cl_valve", False)),
+                    line_cfg=int(st.get("line_in_cfg", 0))
+                )
+                pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
+                if not pref:
+                    log("No cloud prefix known for", mac, "РІР‚вЂќ waiting for incoming frame to learn it")
+                    return
+                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
+                log("CMD dry_flag ->", mac, "on" if want_on else "off")
+
+            elif cmd[:1] == ["close_on_offline"]:
+                pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
+                up = pl.upper()
+                want_on = up in ("1","ON","CLOSE","TRUE","YES") or pl.lower() in ("on","close")
+                st = state_cache.get(mac, {})
+                frame = compose_settings_frame(
+                    open_valve=bool(st.get("valve_open", False)),
+                    dry=bool(st.get("dry_flag", False)),
+                    close_on_offline=want_on,
+                    line_cfg=int(st.get("line_in_cfg", 0))
+                )
+                pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
+                if not pref:
+                    log("No cloud prefix known for", mac, "РІР‚вЂќ waiting for incoming frame to learn it")
+                    return
+                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
+                log("CMD close_on_offline ->", mac, "on" if want_on else "off")
+
+            elif len(cmd) >= 1 and cmd[0].startswith("line_") and cmd[0].endswith("_type"):
+                try:
+                    part = cmd[0]  # e.g. line_1_type
+                    idx = int(part.split("_")[1])
+                except Exception:
+                    idx = None
+                if idx is None or not (1 <= idx <= 4):
+                    return
+                pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip().lower()
+                want_counter = pl in ("1","on","true","yes","counter") or pl == "counter"
+                st = state_cache.get(mac, {})
+                base_cfg = int(st.get("line_in_cfg", 0)) & 0x0F
+                mask = 1 << (idx - 1)
+                if want_counter:
+                    new_cfg = base_cfg | mask
+                else:
+                    new_cfg = base_cfg & (~mask & 0x0F)
+                frame = compose_settings_frame(
+                    open_valve=bool(st.get("valve_open", False)),
+                    dry=bool(st.get("dry_flag", False)),
+                    close_on_offline=bool(st.get("flag_cl_valve", False)),
+                    line_cfg=new_cfg
+                )
+                pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
+                if not pref:
+                    log("No cloud prefix known for", mac, "РІР‚вЂќ waiting for incoming frame to learn it")
+                    return
+                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
+                log(f"CMD line_{idx}_type ->", mac, "counter" if want_counter else "sensor")
             
 
     except Exception as e:
