@@ -140,11 +140,6 @@ def parse_system_state(buf: bytes) -> dict:
                 val = (v[j]<<24)|(v[j+1]<<16)|(v[j+2]<<8)|v[j+3]
                 cs.append({"value": val & 0xFFFFFFFF, "step": v[j+4]})
             out["counters"] = cs
-        elif tag == 0x44: # total water ASCII вЂ” РјС‹ РЅРµ РїСѓР±Р»РёРєСѓРµРј (РїРѕ РїСЂРѕСЃСЊР±Рµ)
-            try:
-                out["water_total_ascii"] = v.decode("ascii","ignore")
-                out["water_total"] = int(out["water_total_ascii"])
-            except: pass
         elif tag == 0x57: # module RSSI/level
             if len(v): out["W"] = v[0]
         else:
@@ -201,19 +196,19 @@ def pub(topic, payload, retain=None, qos=0):
 def publish_raw(mac, buf: bytes):
     base = f"{TOPIC_PREFIX}/{mac}/raw"
     hexstr = buf.hex()
-    b64    = buf.hex() # РѕСЃС‚Р°РІРёРј hex РІ РѕР±РѕРёС… РґР»СЏ РїСЂРѕСЃС‚РѕС‚С‹ С‡С‚РµРЅРёСЏ
+    b64    = buf.hex() 
     t = buf[3]
     th = f"0x{t:02x}"
     name = type_name(t)
     ts = int(time.time()*1000)
 
-    # РЈРЅРёРІРµСЂСЃР°Р»СЊРЅС‹Рµ
+    
     pub(f"{base}/hex", hexstr, retain=False)
-    pub(f"{base}/base64",  buf.decode("latin1","ignore"), retain=False)  # РµСЃР»Рё С…РѕС‡РµС‚СЃСЏ СЃС‹СЂРµС†
+    pub(f"{base}/base64",  buf.decode("latin1","ignore"), retain=False)  
     pub(f"{base}/type", th, retain=False)
     pub(f"{base}/len", len(buf), retain=False)
 
-    # РџРѕ С‚РёРїСѓ (retained)
+    
     byT = f"{TOPIC_PREFIX}/{mac}/raw/by_type/{th}"
     pub(f"{byT}/hex", hexstr, retain=True)
     pub(f"{byT}/base64", buf.hex(), retain=True)
@@ -239,7 +234,7 @@ def ensure_discovery(mac):
     safe_mac = mac.replace(":", "_").replace("-", "_").lower()
     dev_id = f"neptun_{safe_mac}"
     device["identifiers"] = [dev_id]
-    # РљР»Р°РїР°РЅ РєР°Рє MQTT switch (РїСЂРѕСЃС‚Р°СЏ СЃРѕРІРјРµСЃС‚РёРјРѕСЃС‚СЊ)
+    
     obj_id = f"neptun_{safe_mac}_valve"
     conf = {
         "name": "Neptun Valve",
@@ -254,7 +249,7 @@ def ensure_discovery(mac):
     }
     pub(f"{DISCOVERY_PRE}/switch/{obj_id}/config", conf, retain=True)
 
-    # РЎС‡РµС‚С‡РёРєРё (Р»РёС‚СЂС‹ РєР°Рє value/step)
+    
     for i in range(1,5):
         sid = f"neptun_{safe_mac}_counter_{i}"
         conf = {
@@ -265,7 +260,7 @@ def ensure_discovery(mac):
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{sid}/config", conf, retain=True)
-        # Р›РёС‚СЂС‹ (derived)
+        
         sidL = f"neptun_{safe_mac}_liters_{i}"
         confL = {
             "name": f"Counter line {i} (liters)",
@@ -409,7 +404,7 @@ def publish_system(mac_from_topic, buf: bytes):
     publish_raw(mac, buf)
     ensure_discovery(mac)
 
-    # РєСЌС€ РґР»СЏ РєРѕРјР°РЅРґ
+    
     prev = state_cache.get(mac, {})
     prev.update({
         "dry_flag": bool(st.get("dry_flag", False)),
@@ -418,7 +413,7 @@ def publish_system(mac_from_topic, buf: bytes):
     })
     state_cache[mac] = prev
 
-    # wireless sensors -> РїСЂРѕСЃС‚С‹Рµ С‚РѕРїРёРєРё Рё СЃРІРѕРґРєР°
+    
     sensors_status = []
     for s in st.get("wireless_sensors", []):
         sensors_status.append({
@@ -430,8 +425,8 @@ def publish_system(mac_from_topic, buf: bytes):
         pub(f"{base}/sensors_status/{s['sensor_id']}/battery", s["battery_percent"], retain=False)
         pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", s["signal_level"], retain=False)
         pub(f"{base}/sensors_status/{s['sensor_id']}/attention", 1 if s["leak"] else 0, retain=False)
-        # discovery РґР»СЏ leak РєР°Рє binary_sensor
-        # sanitize object_id and identifiers for HA discovery
+        
+        
         obj_id = f"neptun_{safe_mac}_leak_{s['sensor_id']}"
         conf = {
             "name": f"Leak {s['sensor_id']}",
@@ -446,7 +441,7 @@ def publish_system(mac_from_topic, buf: bytes):
         }
         pub(f"{DISCOVERY_PRE}/binary_sensor/{obj_id}/config", conf, retain=True)
 
-        # Р±Р°С‚Р°СЂРµСЏ/СЃРёРіРЅР°Р» (РѕР±С‹С‡РЅС‹Рµ sensors)
+        
         for what, name, unit in (("battery","Battery","%"), ("signal_level","Signal","lqi")):
             sid = f"neptun_{mac}_{what}_{s['sensor_id']}".replace(":","_").replace("-","_").lower()
             conf2 = {
@@ -477,7 +472,7 @@ def publish_system(mac_from_topic, buf: bytes):
         "valve_settings": "opened" if st.get("valve_open") else "closed",
         "close_valve_flag": "close" if st.get("flag_cl_valve") else "open",
     }
-    # РџСѓР±Р»РёРєСѓРµРј РєР°Рє СЂР°РЅСЊС€Рµ, РЅРѕ Р±РµР· lines_status Рё Р±РµР· water_total
+    
     pub(f"{base}/settings/status/alert", settings["status"]["alert"], retain=True)
     pub(f"{base}/settings/status/dry_flag", settings["status"]["dry_flag"], retain=True)
     pub(f"{base}/settings/status/sensors_lost", settings["status"]["sensors_lost"], retain=True)
@@ -492,12 +487,12 @@ def publish_system(mac_from_topic, buf: bytes):
     pub(f"{base}/settings/valve_settings", settings["valve_settings"], retain=True)
     pub(f"{base}/settings/close_valve_flag", settings["close_valve_flag"], retain=True)
 
-    # top-level РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂС‹ + signal_level (С‚РµР»РµРјРµС‚СЂРёСЏ)
+    
     if "device_id" in st: pub(f"{base}/device_id", st["device_id"], retain=True)
     pub(f"{base}/mac_address", mac, retain=True)
     if "W" in st: pub(f"{base}/signal_level", st["W"], retain=False)
 
-    # summary config/json (retained)
+    
     parsedCfg = {
         "settings": settings,
         "device_id": st.get("device_id",""),
@@ -508,7 +503,7 @@ def publish_system(mac_from_topic, buf: bytes):
     if sensors_status: parsedCfg["sensors_status"] = sensors_status
     pub(f"{base}/config/json", parsedCfg, retain=True)
 
-    # counters: value СѓР¶Рµ РІ Р»РёС‚СЂР°С…; liters = value
+    
     for idx, c in enumerate(st.get("counters", []), start=1):
         val = int(c.get("value",0)); step = int(c.get("step",1)) or 1
         pub(f"{base}/counters/line_{idx}/value", val, retain=False)
@@ -563,14 +558,14 @@ def compose_settings_frame(open_valve: bool, dry=False, close_on_offline=False, 
 
 def on_connect(c, userdata, flags, rc):
     log("MQTT connected", rc)
-    # Р’С…РѕРґСЏС‰РёРµ Р±РёРЅР°СЂРЅС‹Рµ РєР°РґСЂС‹ РѕС‚ Neptun (Р»РѕРєР°Р»РёР·РѕРІР°РЅРЅС‹Р№ В«РѕР±Р»Р°РєРѕВ»-РїСЂРµС„РёРєСЃ)
+    
     if CLOUD_PREFIX:
         c.subscribe(f"{CLOUD_PREFIX}/+/from", qos=0)
     else:
         c.subscribe("+/+/from", qos=0)
         if DEBUG:
             c.subscribe("#", qos=0)
-    # РљРѕРјР°РЅРґС‹ РѕС‚ HA
+    
     c.subscribe(f"{TOPIC_PREFIX}/+/cmd/#", qos=0)
     try:
         print(
@@ -590,7 +585,7 @@ def on_message(c, userdata, msg):
         if DEBUG:
             log("RX", t)
         if t.endswith("/from") and t.count("/") >= 2:
-            # mac РёР· С‚РѕРїРёРєР° 14cb.../<MAC>/from
+            
             mac = t.split("/")[1]
             try:
                 pref = t.split("/")[0]
@@ -600,7 +595,7 @@ def on_message(c, userdata, msg):
             buf = msg.payload if isinstance(msg.payload, (bytes, bytearray)) else bytes(msg.payload)
             if not buf or len(buf) < 8:
                 return
-            # СЃРѕС…СЂР°РЅРёС‚СЊ РґР»СЏ РѕС‚Р»Р°РґРєРё СЃС‹СЂРµС†
+            
             publish_raw(mac, buf)
             if not frame_ok(buf):
                 log("Bad frame", t, buf.hex())
@@ -611,19 +606,19 @@ def on_message(c, userdata, msg):
             elif typ == 0x53:
                 publish_sensor_state(mac, buf)
             elif typ in (0x4E, 0x63, 0x43):
-                # РњРѕР¶РЅРѕ РґРѕР±Р°РІРёС‚СЊ РѕР±СЂР°Р±РѕС‚РєСѓ РёРјС‘РЅ РїСЂРё РЅРµРѕР±С…РѕРґРёРјРѕСЃС‚Рё
+                
                 pass
             else:
                 pass
 
         elif t.startswith(f"{TOPIC_PREFIX}/") and "/cmd/" in t:
-            # РєРѕРјР°РЅРґС‹ РёР· HA
+            
             parts = t.split("/")
             # [neptun, <mac>, cmd, ...]
             mac = parts[1]
             cmd = parts[3:]
             if cmd[:1] == ["valve"]:
-                # РѕР¶РёРґР°РµРј payload "1"/"0" РёР»Рё "ON"/"OFF"|"OPEN"/"CLOSE"
+                
                 pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip().upper()
                 want_open = pl in ("1","ON","OPEN","TRUE")
                 st = state_cache.get(mac, {})
@@ -633,7 +628,7 @@ def on_message(c, userdata, msg):
                     close_on_offline=bool(st.get("flag_cl_valve", False)),
                     line_cfg=int(st.get("line_in_cfg", 0))
                 )
-                # РџСѓР±Р»РёРєСѓРµРј РІ "РѕР±Р»Р°С‡РЅС‹Р№" to, RETAIN=TRUE вЂ” СѓСЃС‚СЂРѕР№СЃС‚РІРѕ СЃР°РјРѕ С‡РёСЃС‚РёС‚
+                
                 if CLOUD_PREFIX:
                     pref = CLOUD_PREFIX
                 else:
@@ -646,7 +641,7 @@ def on_message(c, userdata, msg):
                     return
                 c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log("CMD valve ->", mac, "open" if want_open else "close")
-            # РјРѕР¶РЅРѕ РґРѕР±Р°РІРёС‚СЊ: cmd/get_names -> 0x4E Рё 0x63, cmd/get_state -> 0x52
+            
 
     except Exception as e:
         log("on_message error:", e)
