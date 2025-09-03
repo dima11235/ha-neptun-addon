@@ -350,7 +350,7 @@ def ensure_discovery(mac):
         pub(f"{DISCOVERY_PRE}/sensor/{sidL}/config", confL, retain=True)
 
         # Derived: cubic meters from liters via value_template
-        sidM = f"neptun_{safe_mac}_counter_{i}"
+        sidM = f"neptun_{safe_mac}_line_{i}_counter"
         confM = {
             "name": f"Counter line {i} (mР вЂ™РЎвЂ“)",
             "unique_id": sidM,
@@ -367,7 +367,7 @@ def ensure_discovery(mac):
         pub(f"{DISCOVERY_PRE}/sensor/{sidM}/config", confM, retain=True)
 
         # Step in liters per pulse (L/pulse)
-        sidS = f"neptun_{safe_mac}_step_{i}"
+        sidS = f"neptun_{safe_mac}_line_{i}_step"
         confS = {
             "name": f"Counter {i} step (L/pulse)",
             "unique_id": sidS,
@@ -379,7 +379,7 @@ def ensure_discovery(mac):
 
     # Wired leak sensors (lines 1..4)
     for i in range(1,5):
-        wired_id = f"neptun_{safe_mac}_wired_{i}"
+        wired_id = f"neptun_{safe_mac}_line_{i}_leak"
         wired_conf = {
             "name": f"Wired sensor {i}",
             "unique_id": wired_id,
@@ -506,7 +506,7 @@ def publish_system(mac_from_topic, buf: bytes):
         pub(f"{base}/sensors_status/{s['sensor_id']}/attention", 1 if s["leak"] else 0, retain=False)
         
         
-        obj_id = f"neptun_{safe_mac}_leak_{s['sensor_id']}"
+        obj_id = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_leak"
         conf = {
             "name": f"Leak {s['sensor_id']}",
             "unique_id": obj_id,
@@ -522,12 +522,15 @@ def publish_system(mac_from_topic, buf: bytes):
 
         
         for what, name, unit in (("battery","Battery","%"), ("signal_level","Signal","lqi")):
-            sid = f"neptun_{mac}_{what}_{s['sensor_id']}".replace(":","_").replace("-","_").lower()
+            if what == "battery":
+                sid = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_battery"
+            else:
+                sid = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_signal_level"
             conf2 = {
                 "name": f"{name} {s['sensor_id']}",
                 "unique_id": sid,
                 "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/{what}",
-                "device": {"identifiers":[f"neptun_{mac}".replace(":","_").replace("-","_").lower()]}
+                "device": {"identifiers":[dev_id]}
             }
             if unit: conf2["unit_of_measurement"] = unit
             pub(f"{DISCOVERY_PRE}/sensor/{sid}/config", conf2, retain=True)
