@@ -1,4 +1,22 @@
 #!/usr/bin/env python3
+""" BRIDGE DOC: Neptun AquaControl MQTT bridge
+
+High-level overview:
+- Listens to cloud MQTT frames at `<prefix>/<MAC>/from` (binary).
+- Validates frames (CRC16-CCITT), decodes content and publishes structured topics under `neptun/<MAC>/...`.
+- Publishes Home Assistant discovery under `homeassistant/...` for switches and sensors.
+
+Environment variables:
+- NB_TOPIC_PREFIX: base for local topics (default: neptun).
+- NB_DISCOVERY_PREFIX: HA discovery (default: homeassistant).
+- NB_CLOUD_PREFIX: upstream prefix for sending commands back.
+- NB_MQTT_USER/NB_MQTT_PASS: optional broker auth.
+- NB_RETAIN/NB_DEBUG: behavior toggles.
+
+Protocol notes:
+- Frame signature: 0x02 0x54 ... type at byte[3], big-endian length at [4..5], CRC16-CCITT trailing 2 bytes.
+- Types: 0x52 system_state, 0x53 sensor_state, 0x43 counter_state, etc.
+"""
 import os, sys, json, time, struct
 from datetime import datetime
 import paho.mqtt.client as mqtt
@@ -33,6 +51,7 @@ except Exception:
     pass
 
 # ===== CRC16-CCITT =====
+# [BRIDGE DOC] Compute CRC16-CCITT over bytes, polynomial 0x1021, initial 0xFFFF.
 def crc16_ccitt(data: bytes) -> int:
     c = 0xFFFF
     for b in data:
@@ -44,6 +63,7 @@ def crc16_ccitt(data: bytes) -> int:
                 c = (c << 1) & 0xFFFF
     return c & 0xFFFF
 
+# [BRIDGE DOC] Validate frame signature (0x02 0x54), length, and CRC.
 def frame_ok(buf: bytes) -> bool:
     if not buf or len(buf) < 8: return False
     if buf[0] != 0x02 or buf[1] != 0x54: return False
@@ -52,6 +72,7 @@ def frame_ok(buf: bytes) -> bool:
     if len(buf) != T: return False
     return struct.unpack(">H", buf[-2:])[0] == crc16_ccitt(buf[:-2])
 
+# [BRIDGE DOC] Map numeric frame type to a human-readable label.
 def type_name(t: int) -> str:
     return {
         0x52: "system_state",
@@ -64,11 +85,13 @@ def type_name(t: int) -> str:
         0x57: "reconnect",
     }.get(t, "unknown")
 
+# [BRIDGE DOC] Split NUL-separated CP-1251 bytes into decoded strings.
 def split_cp1251_strings(b: bytes):
     parts = b.split(b"\x00")
     if parts and parts[-1] == b"": parts = parts[:-1]
     return [p.decode("cp1251", errors="ignore") for p in parts]
 
+# [BRIDGE DOC] Convert status bitmask to a comma-separated summary (ALARM/BATTERY/etc).
 def decode_status_name(s: int) -> str:
     if s == 0: return "NORMAL"
     arr = []
@@ -78,6 +101,7 @@ def decode_status_name(s: int) -> str:
     if s & 0x08: arr.append("SENSOR OFFLINE")
     return ",".join(arr)
 
+# [BRIDGE DOC] Decode 4-bit line input config into sensor/counter labels per line.
 def map_lines_in(mask: int):
     a = []
     for i in range(4):
@@ -85,6 +109,7 @@ def map_lines_in(mask: int):
     return {"line_1":a[0],"line_2":a[1],"line_3":a[2],"line_4":a[3]}
 
 # ===== PARSERS =====
+# [BRIDGE DOC] Parse 0x52 payload: flags, wireless sensors, wired lines, counters, totals.
 def parse_system_state(buf: bytes) -> dict:
     p = buf[6:-2]
     out = {}
@@ -94,7 +119,7 @@ def parse_system_state(buf: bytes) -> dict:
         ln = (p[i] << 8) | p[i+1]; i += 2
         v = p[i:i+ln]; i += ln
 
-        if tag == 0x49: # 'I' device type/version or id in РЅРµРєРѕС‚РѕСЂС‹С… РїСЂРѕС€РёРІРєР°С…
+        if tag == 0x49: # 'I' device type/version or id 
             try: out["device_id"] = v.decode("ascii", "ignore")
             except: pass
         elif tag == 0x4D: # MAC
@@ -146,6 +171,7 @@ def parse_system_state(buf: bytes) -> dict:
             pass
     return out
 
+# [BRIDGE DOC] Parse 0x53 payload into list of wireless sensor states.
 def parse_sensor_state(buf: bytes):
     p = buf[6:-2]
     i = 2
@@ -171,11 +197,11 @@ mac_to_prefix = {}
 def log(*a):
     if DEBUG: print("[BRIDGE]", *a, file=sys.stderr)
 
+# [BRIDGE DOC] Publish wrapper: JSON-encode dicts, apply retain default, debug logging.
 def pub(topic, payload, retain=None, qos=0):
     if retain is None: retain = RETAIN_DEFAULT
     if isinstance(payload, (dict, list)):
         payload = json.dumps(payload, ensure_ascii=False)
-    # Suppress legacy counter discovery (raw pulses and liters) вЂ” keep only m3 sensors
     try:
         if isinstance(payload, str) and topic.startswith(f"{DISCOVERY_PRE}/sensor/"):
             # quick check: infer by keywords in payload
@@ -193,6 +219,7 @@ def pub(topic, payload, retain=None, qos=0):
         print("[BRIDGE]","PUB", topic, f"len={plen}", f"retain={retain}", file=sys.stderr, flush=True)
     client.publish(topic, payload, qos=qos, retain=retain)
 
+# [BRIDGE DOC] Publish raw frames (hex and bytes) to diagnostic topics, grouped by type/name.
 def publish_raw(mac, buf: bytes):
     base = f"{TOPIC_PREFIX}/{mac}/raw"
     hexstr = buf.hex()
@@ -221,6 +248,7 @@ def publish_raw(mac, buf: bytes):
         src = {"hex":hexstr,"base64":buf.hex(),"len":len(buf),"ts":ts,"type":th}[sfx]
         pub(f"{byN}/{sfx}", src, retain=True)
 
+# [BRIDGE DOC] Emit Home Assistant discovery for one device MAC (id-sanitized).
 def ensure_discovery(mac):
     if mac in announced:
         return
@@ -275,11 +303,11 @@ def ensure_discovery(mac):
         # Derived: cubic meters from liters via value_template
         sidM = f"neptun_{safe_mac}_counter_{i}"
         confM = {
-            "name": f"Counter line {i} (mВі)",
+            "name": f"Counter line {i} (m³)",
             "unique_id": sidM,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/value",
             "device_class": "water",
-            "unit_of_measurement": "mВі",
+            "unit_of_measurement": "m³",
             "state_class": "total",
             "value_template": "{{ value | float / 1000 }}",
             "device": device
@@ -394,6 +422,7 @@ def ensure_discovery(mac):
 
     announced.add(mac)
 
+# [BRIDGE DOC] Handle 0x52: update caches, publish states/settings/counters and discovery.
 def publish_system(mac_from_topic, buf: bytes):
     st = parse_system_state(buf)
     mac = st.get("mac", mac_from_topic)
@@ -532,6 +561,7 @@ def publish_system(mac_from_topic, buf: bytes):
     if "status" in st: pub(f"{base}/state/status", st["status"], retain=False)
     if "status_name" in st and st["status_name"]: pub(f"{base}/state/status_name", st["status_name"], retain=False)
 
+# [BRIDGE DOC] Handle 0x53: publish per-sensor battery, signal and attention flag.
 def publish_sensor_state(mac_from_topic, buf: bytes):
     sensors = parse_sensor_state(buf)
     mac = mac_from_topic
@@ -546,6 +576,7 @@ def publish_sensor_state(mac_from_topic, buf: bytes):
             pub(f"{base}/sensors_status/{s['sensor_id']}/attention", 1 if s["leak"] else 0, retain=False)
         pub(f"{base}/sensors_status/json", slim, retain=False)
 
+# [BRIDGE DOC] Build 0x57 settings frame (valve/dry/close_on_offline/line_cfg) with CRC.
 def compose_settings_frame(open_valve: bool, dry=False, close_on_offline=False, line_cfg=0):
     # 02 54 51 57 00 07 53 00 04 VV DF CF LC CRC
     body = bytearray([0x02,0x54,0x51,0x57,0x00,0x07, 0x53,0x00,0x04, 0,0,0,0])
@@ -556,6 +587,7 @@ def compose_settings_frame(open_valve: bool, dry=False, close_on_offline=False, 
     crc = crc16_ccitt(body)
     return bytes(body + struct.pack(">H", crc))
 
+# [BRIDGE DOC] Subscribe to upstream `<prefix>/+/from` and local `neptun/+/cmd/#`.
 def on_connect(c, userdata, flags, rc):
     log("MQTT connected", rc)
     
@@ -579,6 +611,7 @@ def on_connect(c, userdata, flags, rc):
     if DEBUG:
         print("[BRIDGE]","Subscribed:", f"{CLOUD_PREFIX or '+/+'}/from and {TOPIC_PREFIX}/+/cmd/#", file=sys.stderr, flush=True)
 
+# [BRIDGE DOC] Route frames to publishers; handle valve command and forward to cloud.
 def on_message(c, userdata, msg):
     try:
         t = msg.topic
@@ -637,7 +670,7 @@ def on_message(c, userdata, msg):
                     except Exception:
                         pref = ""
                 if not pref:
-                    log("No cloud prefix known for", mac, "вЂ” waiting for incoming frame to learn it")
+                    log("No cloud prefix known for", mac, "Waiting for incoming frame to learn it")
                     return
                 c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log("CMD valve ->", mac, "open" if want_open else "close")
@@ -649,6 +682,7 @@ def on_message(c, userdata, msg):
 client.on_connect = on_connect
 client.on_message = on_message
 
+# [BRIDGE DOC] MQTT connect loop with exponential backoff on errors.
 def main():
     backoff = 1
     while True:
