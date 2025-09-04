@@ -108,6 +108,24 @@ def map_lines_in(mask: int):
         a.append("water_counter" if ((mask >> i) & 1) else "wired_sensor")
     return {"line_1":a[0],"line_2":a[1],"line_3":a[2],"line_4":a[3]}
 
+# Unified builder for Home Assistant device descriptor
+def make_device(mac: str):
+    """Return (device_dict, safe_mac, dev_id) for consistent HA discovery.
+
+    - safe_mac: MAC sanitized for IDs (':' and '-' replaced with '_', lowercased)
+    - dev_id:   primary device identifier used in discovery: 'neptun_<safe_mac>'
+    - device:   dict with identifiers and basic metadata used in discovery payloads
+    """
+    safe_mac = mac.replace(":", "_").replace("-", "_").lower()
+    dev_id = f"neptun_{safe_mac}"
+    device = {
+        "identifiers": [dev_id],
+        "manufacturer": "Neptun",
+        "model": "AquaControl",
+        "name": f"Neptun {mac}"
+    }
+    return device, safe_mac, dev_id
+
 # ===== PARSERS =====
 # [BRIDGE DOC] Parse 0x52 payload: flags, wireless sensors, wired lines, counters, totals.
 def parse_system_state(buf: bytes) -> dict:
@@ -267,17 +285,7 @@ def ensure_discovery(mac):
     """
     if mac in announced:
         return
-    
-    # sanitize MAC for discovery ids (avoid colons)
-    safe_mac = mac.replace(":", "_").replace("-", "_").lower()
-    dev_id = f"neptun_{safe_mac}"
-
-    device = {
-        "identifiers": [dev_id],
-        "manufacturer": "Neptun",
-        "model": "AquaControl",
-        "name": f"Neptun {safe_mac}"
-    }
+    device, safe_mac, dev_id = make_device(mac)
     
     # Two stateless buttons for valve control
     btn_open_id = f"neptun_{safe_mac}_valve_open"
@@ -480,17 +488,7 @@ def publish_system(mac_from_topic, buf: bytes):
     st = parse_system_state(buf)
     mac = st.get("mac", mac_from_topic)
     base = f"{TOPIC_PREFIX}/{mac}"
-
-    # sanitize MAC for discovery ids (avoid colons)
-    safe_mac = mac.replace(":", "_").replace("-", "_").lower()
-    dev_id = f"neptun_{safe_mac}"
-
-    device = {
-        "identifiers": [dev_id],
-        "manufacturer": "Neptun",
-        "model": "AquaControl",
-        "name": f"Neptun {safe_mac}"
-    }
+    device, safe_mac, dev_id = make_device(mac)
 
     publish_raw(mac, buf)
     ensure_discovery(mac)
