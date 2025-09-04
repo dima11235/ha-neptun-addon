@@ -250,6 +250,21 @@ def publish_raw(mac, buf: bytes):
 
 # [BRIDGE DOC] Emit Home Assistant discovery for one device MAC (id-sanitized).
 def ensure_discovery(mac):
+    """
+    Publish Home Assistant discovery configs for a single Neptun device.
+
+    Purpose:
+    - Define entities (buttons, switches, selects, sensors) so HA can create
+      and link them to one device before state starts flowing.
+    - Use a stable device identifier `neptun_<safe_mac>` to avoid splitting
+      entities across multiple HA devices.
+    - Idempotent: runs only once per MAC and returns early if already done.
+
+    Notes:
+    - Discovery topics go under `<DISCOVERY_PRE>/*/neptun_<safe_mac>_.../config`.
+    - This function does NOT publish live state values; see publish_system() and
+      publish_sensor_state() for runtime updates.
+    """
     if mac in announced:
         return
     
@@ -450,6 +465,18 @@ def ensure_discovery(mac):
 
 # [BRIDGE DOC] Handle 0x52: update caches, publish states/settings/counters and discovery.
 def publish_system(mac_from_topic, buf: bytes):
+    """
+    Handle a 0x52 "system_state" frame and publish runtime data.
+
+    Responsibilities:
+    - Parse the binary frame (flags, counters, wireless/wired sensors, lines).
+    - Ensure HA discovery has been published once (calls ensure_discovery()).
+    - Update `state_cache` to preserve flags used when composing commands.
+    - Publish structured MQTT topics under `neptun/<mac>/*` for HA to consume.
+
+    This function focuses on live state (non-discovery). It is called for every
+    valid 0x52 frame received from the Neptun cloud.
+    """
     st = parse_system_state(buf)
     mac = st.get("mac", mac_from_topic)
     base = f"{TOPIC_PREFIX}/{mac}"
@@ -606,6 +633,16 @@ def publish_system(mac_from_topic, buf: bytes):
 
 # [BRIDGE DOC] Handle 0x53: publish per-sensor battery, signal and attention flag.
 def publish_sensor_state(mac_from_topic, buf: bytes):
+    """
+    Handle a 0x53 "sensor_state" frame and publish per-sensor telemetry.
+
+    Publishes for each wireless sensor:
+    - Battery percentage, signal level (LQI), and attention (leak) flags
+    under `neptun/<mac>/sensors_status/<id>/*`.
+
+    Discovery is not re-sent here; entity definitions are created in
+    ensure_discovery(). This function emits only current values.
+    """
     sensors = parse_sensor_state(buf)
     mac = mac_from_topic
     base = f"{TOPIC_PREFIX}/{mac}"
@@ -671,6 +708,18 @@ def on_connect(c, userdata, flags, rc):
 
 # [BRIDGE DOC] Route frames to publishers; handle valve command and forward to cloud.
 def on_message(c, userdata, msg):
+    """
+    MQTT message router for both cloud frames and HA commands.
+
+    - Cloud frames: `<prefix>/<MAC>/from` (binary). Validates and dispatches
+      by frame type (0x52 -> publish_system, 0x53 -> publish_sensor_state).
+    - HA commands: `neptun/<MAC>/cmd/...` (valve, dry_flag, close_on_offline,
+      line_i_type). Composes a settings frame and publishes it back to the
+      learned cloud prefix `<prefix>/<MAC>/to`.
+
+    Uses `state_cache` to retain flags so changing one setting (e.g. valve)
+    does not unintentionally reset others.
+    """
     try:
         t = msg.topic
         if DEBUG:
