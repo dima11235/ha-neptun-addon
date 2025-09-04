@@ -467,13 +467,6 @@ def publish_system(mac_from_topic, buf: bytes):
 
     publish_raw(mac, buf)
     ensure_discovery(mac)
-
-    device = {
-        "identifiers": [f"neptun_{mac}"],
-        "manufacturer": "Neptun",
-        "model": "AquaControl",
-        "name": f"Neptun {mac}"
-    }
     
     prev = state_cache.get(mac, {})
     prev.update({
