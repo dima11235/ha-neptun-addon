@@ -122,7 +122,7 @@ def make_device(mac: str):
         "identifiers": [dev_id],
         "manufacturer": "Neptun",
         "model": "AquaControl",
-        "name": f"Neptun {mac}"
+        "name": f"Neptun {safe_mac}"
     }
     return device, safe_mac, dev_id
 
