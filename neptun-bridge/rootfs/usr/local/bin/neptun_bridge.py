@@ -285,12 +285,13 @@ def ensure_discovery(mac):
     """
     if mac in announced:
         return
+    
     device, safe_mac, dev_id = make_device(mac)
     
     # Two stateless buttons for valve control
     btn_open_id = f"neptun_{safe_mac}_valve_open"
     btn_open_conf = {
-        "name": f"Neptun {safe_mac} Open Valve",
+        "name": f"Neptun {safe_mac} Valve Open",
         "unique_id": btn_open_id,
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/valve/set",
         "payload_press": "1",
@@ -300,13 +301,14 @@ def ensure_discovery(mac):
 
     btn_close_id = f"neptun_{safe_mac}_valve_close"
     btn_close_conf = {
-        "name": f"Neptun {safe_mac} Close Valve",
+        "name": f"Neptun {safe_mac} Valve Close",
         "unique_id": btn_close_id,
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/valve/set",
         "payload_press": "0",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/button/{btn_close_id}/config", btn_close_conf, retain=True)
+
     # Add MQTT switch for Dry Flag
     obj_id2 = f"neptun_{safe_mac}_dry_flag"
     conf2 = {
@@ -350,7 +352,6 @@ def ensure_discovery(mac):
         }
         pub(f"{DISCOVERY_PRE}/select/{sel_id}/config", sel_conf, retain=True)
 
-    
     for i in range(1,5):
         # Derived: cubic meters from liters via value_template
         sidM = f"neptun_{safe_mac}_line_{i}_counter"
@@ -501,7 +502,6 @@ def publish_system(mac_from_topic, buf: bytes):
         "line_in_cfg": int(st.get("line_in_cfg", 0))
     })
     state_cache[mac] = prev
-
     
     sensors_status = []
     for s in st.get("wireless_sensors", []):
@@ -514,8 +514,7 @@ def publish_system(mac_from_topic, buf: bytes):
         pub(f"{base}/sensors_status/{s['sensor_id']}/battery", s["battery_percent"], retain=False)
         pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", s["signal_level"], retain=False)
         pub(f"{base}/sensors_status/{s['sensor_id']}/attention", 1 if s["leak"] else 0, retain=False)
-        
-        
+             
         obj_id = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_leak"
         conf = {
             "name": f"Neptun {safe_mac} Sensor {s['sensor_id']} Leak",
@@ -527,28 +526,26 @@ def publish_system(mac_from_topic, buf: bytes):
         }
         pub(f"{DISCOVERY_PRE}/binary_sensor/{obj_id}/config", conf, retain=True)
 
-
-        sid = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_battery"
+        obj_id = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_battery"
         conf2 = {
             "name": f"Neptun {safe_mac} Sensor {s['sensor_id']} Battery",
-            "unique_id": sid,
+            "unique_id": obj_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/battery",
             "unit_of_measurement": "%",
             "device_class": "battery",
             "device": device
         }
-        pub(f"{DISCOVERY_PRE}/sensor/{sid}/config", conf2, retain=True)
+        pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf2, retain=True)
 
-
-        sid = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_signal_level"
+        obj_id = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_signal_level"
         conf2 = {
             "name": f"Neptun {safe_mac} Sensor {s['sensor_id']} Signal Level",
-            "unique_id": sid,
+            "unique_id": obj_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/signal_level",
             "unit_of_measurement": "lqi",
             "device": device
         }
-        pub(f"{DISCOVERY_PRE}/sensor/{sid}/config", conf2, retain=True)
+        pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf2, retain=True)
 
     if sensors_status:
         pub(f"{base}/sensors_status/json", sensors_status, retain=False)
@@ -600,7 +597,6 @@ def publish_system(mac_from_topic, buf: bytes):
     if sensors_status: parsedCfg["sensors_status"] = sensors_status
     pub(f"{base}/config/json", parsedCfg, retain=True)
 
-    
     for idx, c in enumerate(st.get("counters", []), start=1):
         val = int(c.get("value",0)); step = int(c.get("step",1)) or 1
         pub(f"{base}/counters/line_{idx}/value", val, retain=False)
@@ -620,8 +616,6 @@ def publish_system(mac_from_topic, buf: bytes):
             raw = li_map.get(key, "wired_sensor")
             val = "counter" if raw == "water_counter" else "sensor"
             pub(f"{base}/lines_in/line_{i}", val, retain=True)
-        # derived: liters per pulse if step is pulses-per-liter
-        # do not publish step_liters; step already reports raw setting
 
     # state/*
     pub(f"{base}/state/json", st, retain=False)
