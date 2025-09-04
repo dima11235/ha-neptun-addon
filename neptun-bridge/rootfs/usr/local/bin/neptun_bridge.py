@@ -346,7 +346,7 @@ def ensure_discovery(mac):
             "name": f"Neptun {safe_mac} Line {i} Type",
             "unique_id": sel_id,
             "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/line_{i}_type/set",
-            "state_topic": f"{TOPIC_PREFIX}/{mac}/lines_in/line_{i}",
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/lines_in/line_{i}",
             "options": ["sensor", "counter"],
             "device": device
         }
@@ -398,7 +398,7 @@ def ensure_discovery(mac):
         t_conf = {
             "name": f"Neptun {safe_mac} Line {i} Type",
             "unique_id": t_id,
-            "state_topic": f"{TOPIC_PREFIX}/{mac}/lines_in/line_{i}",
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/lines_in/line_{i}",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{t_id}/config", t_conf, retain=True)
@@ -609,13 +609,8 @@ def publish_system(mac_from_topic, buf: bytes):
             stv = "on" if (i < len(wired) and wired[i]) else "off"
             pub(f"{base}/lines_status/line_{i+1}", stv, retain=False)
 
-    # Publish line input types (sensor/counter)
-    li_map = map_lines_in(st.get("line_in_cfg", 0))
-    if li_map:
-        for i, key in enumerate(["line_1","line_2","line_3","line_4"], start=1):
-            raw = li_map.get(key, "wired_sensor")
-            val = "counter" if raw == "water_counter" else "sensor"
-            pub(f"{base}/lines_in/line_{i}", val, retain=True)
+    # Do not publish duplicate line input types under base/lines_in/*.
+    # Kept only settings/lines_in/{k} publishes above for a single source of truth.
 
     # state/*
     pub(f"{base}/state/json", st, retain=False)
