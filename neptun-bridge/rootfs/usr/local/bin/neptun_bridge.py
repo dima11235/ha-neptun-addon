@@ -252,21 +252,22 @@ def publish_raw(mac, buf: bytes):
 def ensure_discovery(mac):
     if mac in announced:
         return
+    
+    # sanitize MAC for discovery ids (avoid colons)
+    safe_mac = mac.replace(":", "_").replace("-", "_").lower()
+    dev_id = f"neptun_{safe_mac}"
+
     device = {
-        "identifiers": [f"neptun_{mac}"],
+        "identifiers": [dev_id],
         "manufacturer": "Neptun",
         "model": "AquaControl",
         "name": f"Neptun {mac}"
     }
-    # sanitize MAC for discovery ids (avoid colons)
-    safe_mac = mac.replace(":", "_").replace("-", "_").lower()
-    dev_id = f"neptun_{safe_mac}"
-    device["identifiers"] = [dev_id]
     
     # Two stateless buttons for valve control
     btn_open_id = f"neptun_{safe_mac}_valve_open"
     btn_open_conf = {
-        "name": "Open Valve",
+        "name": f"Neptun {safe_mac} Open Valve",
         "unique_id": btn_open_id,
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/valve/set",
         "payload_press": "1",
@@ -276,7 +277,7 @@ def ensure_discovery(mac):
 
     btn_close_id = f"neptun_{safe_mac}_valve_close"
     btn_close_conf = {
-        "name": "Close Valve",
+        "name": f"Neptun {safe_mac} Close Valve",
         "unique_id": btn_close_id,
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/valve/set",
         "payload_press": "0",
@@ -286,7 +287,7 @@ def ensure_discovery(mac):
     # Add MQTT switch for Dry Flag
     obj_id2 = f"neptun_{safe_mac}_dry_flag"
     conf2 = {
-        "name": "Dry Flag",
+        "name": f"Neptun {safe_mac} Dry Flag",
         "unique_id": obj_id2,
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/dry_flag/set",
         "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/dry_flag",
@@ -301,7 +302,7 @@ def ensure_discovery(mac):
     # Add MQTT switch for Close On Offline
     obj_id3 = f"neptun_{safe_mac}_close_on_offline"
     conf3 = {
-        "name": "Close On Offline",
+        "name": f"Neptun {safe_mac} Close On Sensors Offline",
         "unique_id": obj_id3,
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/close_on_offline/set",
         "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/close_valve_flag",
@@ -317,7 +318,7 @@ def ensure_discovery(mac):
     for i in range(1,5):
         sel_id = f"neptun_{safe_mac}_line_{i}_type"
         sel_conf = {
-            "name": f"Line {i} type",
+            "name": f"Neptun {safe_mac} Line {i} type",
             "unique_id": sel_id,
             "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/line_{i}_type/set",
             "state_topic": f"{TOPIC_PREFIX}/{mac}/lines_in/line_{i}",
@@ -328,48 +329,24 @@ def ensure_discovery(mac):
 
     
     for i in range(1,5):
-        sid = f"neptun_{safe_mac}_counter_{i}"
-        conf = {
-            "name": f"Counter line {i} (raw)",
-            "unique_id": sid,
-            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/value",
-            "unit_of_measurement": "pulse",
-            "device": device
-        }
-        pub(f"{DISCOVERY_PRE}/sensor/{sid}/config", conf, retain=True)
-        
-        sidL = f"neptun_{safe_mac}_liters_{i}"
-        confL = {
-            "name": f"Counter line {i} (liters)",
-            "unique_id": sidL,
-            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/liters",
-            "device_class": "water",
-            "unit_of_measurement": "L",
-            "device": device
-        }
-        pub(f"{DISCOVERY_PRE}/sensor/{sidL}/config", confL, retain=True)
-
         # Derived: cubic meters from liters via value_template
         sidM = f"neptun_{safe_mac}_line_{i}_counter"
         confM = {
-            "name": f"Counter line {i} (mР вЂ™РЎвЂ“)",
+            "name": f"Neptun {safe_mac} Line {i} Counter",
             "unique_id": sidM,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/value",
             "device_class": "water",
-            "unit_of_measurement": "mР вЂ™РЎвЂ“",
+            "unit_of_measurement": "m\u00B3",
             "state_class": "total",
             "value_template": "{{ value | float / 1000 }}",
             "device": device
         }
-        # Ensure proper unicode unit for cubic meters and neutral name
-        confM["unit_of_measurement"] = "m\u00B3"
-        confM["name"] = f"Counter {i}"
         pub(f"{DISCOVERY_PRE}/sensor/{sidM}/config", confM, retain=True)
 
         # Step in liters per pulse (L/pulse)
         sidS = f"neptun_{safe_mac}_line_{i}_step"
         confS = {
-            "name": f"Counter {i} step (L/pulse)",
+            "name": f"Neptun {safe_mac} Line {i} Counter Step",
             "unique_id": sidS,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/step",
             "unit_of_measurement": "L/pulse",
@@ -381,7 +358,7 @@ def ensure_discovery(mac):
     for i in range(1,5):
         wired_id = f"neptun_{safe_mac}_line_{i}_leak"
         wired_conf = {
-            "name": f"Wired sensor {i}",
+            "name": f"Neptun {safe_mac} Line {i} Leak",
             "unique_id": wired_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/lines_status/line_{i}",
             "payload_on": "on",
@@ -395,7 +372,7 @@ def ensure_discovery(mac):
     for i in range(1,5):
         t_id = f"neptun_{safe_mac}_line_{i}_type"
         t_conf = {
-            "name": f"Line {i} type",
+            "name": f"Neptun {safe_mac} Line {i} Type",
             "unique_id": t_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/lines_in/line_{i}",
             "device": device
@@ -407,7 +384,7 @@ def ensure_discovery(mac):
     # Overall leak detected
     leak_id = f"neptun_{safe_mac}_leak_detected"
     leak_conf = {
-        "name": "Leak Detected",
+        "name": f"Neptun {safe_mac} Leak Detected",
         "unique_id": leak_id,
         "state_topic": f"{base_topic}/settings/status/alert",
         "payload_on": "on",
@@ -420,7 +397,7 @@ def ensure_discovery(mac):
     # Valve Closed (inverse of valve_open)
     valve_closed_id = f"neptun_{safe_mac}_valve_closed"
     valve_closed_conf = {
-        "name": "Valve Closed",
+        "name": f"Neptun {safe_mac} Valve Closed",
         "unique_id": valve_closed_id,
         "state_topic": f"{base_topic}/state/valve_open",
         "payload_on": "0",
@@ -433,7 +410,7 @@ def ensure_discovery(mac):
     # Module Battery Discharged
     mod_batt_id = f"neptun_{safe_mac}_module_battery_discharged"
     mod_batt_conf = {
-        "name": "Module Battery Discharged",
+        "name": f"Neptun {safe_mac} Module Battery",
         "unique_id": mod_batt_id,
         "state_topic": f"{base_topic}/settings/status/battery_discharge_in_module",
         "payload_on": "yes",
@@ -446,7 +423,7 @@ def ensure_discovery(mac):
     # Sensors Battery Discharged
     sens_batt_id = f"neptun_{safe_mac}_sensors_battery_discharged"
     sens_batt_conf = {
-        "name": "Sensors Battery Discharged",
+        "name": f"Neptun {safe_mac} Sensors Battery Discharged",
         "unique_id": sens_batt_id,
         "state_topic": f"{base_topic}/settings/status/battery_discharge_in_sensor",
         "payload_on": "yes",
@@ -459,7 +436,7 @@ def ensure_discovery(mac):
     # Sensors Lost
     sens_lost_id = f"neptun_{safe_mac}_sensors_lost"
     sens_lost_conf = {
-        "name": "Sensors Lost",
+        "name": f"Neptun {safe_mac} Sensors Lost",
         "unique_id": sens_lost_id,
         "state_topic": f"{base_topic}/settings/status/sensors_lost",
         "payload_on": "yes",
@@ -476,12 +453,27 @@ def publish_system(mac_from_topic, buf: bytes):
     st = parse_system_state(buf)
     mac = st.get("mac", mac_from_topic)
     base = f"{TOPIC_PREFIX}/{mac}"
+
+    # sanitize MAC for discovery ids (avoid colons)
     safe_mac = mac.replace(":", "_").replace("-", "_").lower()
     dev_id = f"neptun_{safe_mac}"
+
+    device = {
+        "identifiers": [dev_id],
+        "manufacturer": "Neptun",
+        "model": "AquaControl",
+        "name": f"Neptun {mac}"
+    }
 
     publish_raw(mac, buf)
     ensure_discovery(mac)
 
+    device = {
+        "identifiers": [f"neptun_{mac}"],
+        "manufacturer": "Neptun",
+        "model": "AquaControl",
+        "name": f"Neptun {mac}"
+    }
     
     prev = state_cache.get(mac, {})
     prev.update({
@@ -508,32 +500,37 @@ def publish_system(mac_from_topic, buf: bytes):
         
         obj_id = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_leak"
         conf = {
-            "name": f"Leak {s['sensor_id']}",
+            "name": f"Neptun {safe_mac} Sensor {s['sensor_id']} Leak",
             "unique_id": obj_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attention",
             "payload_on": "1", "payload_off": "0",
             "device_class": "moisture",
-            "device": {
-                "identifiers":[dev_id],
-                "manufacturer":"Neptun","model":"AquaControl","name":f"Neptun {mac}"
-            }
+            "device": device
         }
         pub(f"{DISCOVERY_PRE}/binary_sensor/{obj_id}/config", conf, retain=True)
 
-        
-        for what, name, unit in (("battery","Battery","%"), ("signal_level","Signal","lqi")):
-            if what == "battery":
-                sid = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_battery"
-            else:
-                sid = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_signal_level"
-            conf2 = {
-                "name": f"{name} {s['sensor_id']}",
-                "unique_id": sid,
-                "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/{what}",
-                "device": {"identifiers":[dev_id]}
-            }
-            if unit: conf2["unit_of_measurement"] = unit
-            pub(f"{DISCOVERY_PRE}/sensor/{sid}/config", conf2, retain=True)
+
+        sid = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_battery"
+        conf2 = {
+            "name": f"Neptun {safe_mac} Sensor {s['sensor_id']} Battery",
+            "unique_id": sid,
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/battery",
+            "unit_of_measurement": "%",
+            "device_class": "battery",
+            "device": device
+        }
+        pub(f"{DISCOVERY_PRE}/sensor/{sid}/config", conf2, retain=True)
+
+
+        sid = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_signal_level"
+        conf2 = {
+            "name": f"Neptun {safe_mac} Sensor {s['sensor_id']} Signal Level",
+            "unique_id": sid,
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/signal_level",
+            "unit_of_measurement": "lqi",
+            "device": device
+        }
+        pub(f"{DISCOVERY_PRE}/sensor/{sid}/config", conf2, retain=True)
 
     if sensors_status:
         pub(f"{base}/sensors_status/json", sensors_status, retain=False)
@@ -561,19 +558,19 @@ def publish_system(mac_from_topic, buf: bytes):
     pub(f"{base}/settings/status/battery_discharge_in_module", settings["status"]["battery_discharge_in_module"], retain=True)
     pub(f"{base}/settings/status/battery_discharge_in_sensor", settings["status"]["battery_discharge_in_sensor"], retain=True)
     pub(f"{base}/settings/dry_flag", settings["dry_flag"], retain=True)
-    li = settings["lines_in"]
-    for k in ("line_1","line_2","line_3","line_4"):
-        pub(f"{base}/settings/lines_in/{k}", li[k], retain=True)
     pub(f"{base}/settings/relay_count", settings["relay_count"], retain=True)
     pub(f"{base}/settings/sensors_count", settings["sensors_count"], retain=True)
     pub(f"{base}/settings/valve_settings", settings["valve_settings"], retain=True)
     pub(f"{base}/settings/close_valve_flag", settings["close_valve_flag"], retain=True)
 
+    li = settings["lines_in"]
+    for k in ("line_1","line_2","line_3","line_4"):
+        pub(f"{base}/settings/lines_in/{k}", li[k], retain=True)
     
     if "device_id" in st: pub(f"{base}/device_id", st["device_id"], retain=True)
-    pub(f"{base}/mac_address", mac, retain=True)
     if "W" in st: pub(f"{base}/signal_level", st["W"], retain=False)
 
+    pub(f"{base}/mac_address", mac, retain=True)
     
     parsedCfg = {
         "settings": settings,
