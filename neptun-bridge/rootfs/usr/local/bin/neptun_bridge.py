@@ -343,7 +343,7 @@ def ensure_discovery(mac):
     for i in range(1,5):
         sel_id = f"neptun_{safe_mac}_line_{i}_type"
         sel_conf = {
-            "name": f"Neptun {safe_mac} Line {i} type",
+            "name": f"Neptun {safe_mac} Line {i} Type",
             "unique_id": sel_id,
             "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/line_{i}_type/set",
             "state_topic": f"{TOPIC_PREFIX}/{mac}/lines_in/line_{i}",
@@ -432,7 +432,7 @@ def ensure_discovery(mac):
     pub(f"{DISCOVERY_PRE}/binary_sensor/{valve_closed_id}/config", valve_closed_conf, retain=True)
 
     # Module Battery Discharged
-    mod_batt_id = f"neptun_{safe_mac}_module_battery_discharged"
+    mod_batt_id = f"neptun_{safe_mac}_module_battery"
     mod_batt_conf = {
         "name": f"Neptun {safe_mac} Module Battery",
         "unique_id": mod_batt_id,
@@ -445,9 +445,9 @@ def ensure_discovery(mac):
     pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_batt_id}/config", mod_batt_conf, retain=True)
 
     # Sensors Battery Discharged
-    sens_batt_id = f"neptun_{safe_mac}_sensors_battery_discharged"
+    sens_batt_id = f"neptun_{safe_mac}_sensors_battery"
     sens_batt_conf = {
-        "name": f"Neptun {safe_mac} Sensors Battery Discharged",
+        "name": f"Neptun {safe_mac} Sensors Battery",
         "unique_id": sens_batt_id,
         "state_topic": f"{base_topic}/settings/status/battery_discharge_in_sensor",
         "payload_on": "yes",
@@ -527,7 +527,7 @@ def publish_system(mac_from_topic, buf: bytes):
         pub(f"{DISCOVERY_PRE}/binary_sensor/{obj_id}/config", conf, retain=True)
 
         obj_id = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_battery"
-        conf2 = {
+        conf = {
             "name": f"Neptun {safe_mac} Sensor {s['sensor_id']} Battery",
             "unique_id": obj_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/battery",
@@ -535,17 +535,17 @@ def publish_system(mac_from_topic, buf: bytes):
             "device_class": "battery",
             "device": device
         }
-        pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf2, retain=True)
+        pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf, retain=True)
 
         obj_id = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_signal_level"
-        conf2 = {
-            "name": f"Neptun {safe_mac} Sensor {s['sensor_id']} Signal Level",
+        conf = {
+            "name": f"Neptun {safe_mac} Sensor {s['sensor_id']} RSSI",
             "unique_id": obj_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/signal_level",
             "unit_of_measurement": "lqi",
             "device": device
         }
-        pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf2, retain=True)
+        pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf, retain=True)
 
     if sensors_status:
         pub(f"{base}/sensors_status/json", sensors_status, retain=False)
@@ -737,8 +737,7 @@ def on_message(c, userdata, msg):
                 publish_system(mac, buf)
             elif typ == 0x53:
                 publish_sensor_state(mac, buf)
-            elif typ in (0x4E, 0x63, 0x43):
-                
+            elif typ in (0x4E, 0x63, 0x43):   
                 pass
             else:
                 pass
