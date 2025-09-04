@@ -261,7 +261,7 @@ def ensure_discovery(mac):
         "identifiers": [dev_id],
         "manufacturer": "Neptun",
         "model": "AquaControl",
-        "name": f"Neptun {mac}"
+        "name": f"Neptun {safe_mac}"
     }
     
     # Two stateless buttons for valve control
@@ -462,7 +462,7 @@ def publish_system(mac_from_topic, buf: bytes):
         "identifiers": [dev_id],
         "manufacturer": "Neptun",
         "model": "AquaControl",
-        "name": f"Neptun {mac}"
+        "name": f"Neptun {safe_mac}"
     }
 
     publish_raw(mac, buf)
