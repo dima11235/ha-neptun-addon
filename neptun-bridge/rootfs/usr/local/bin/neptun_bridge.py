@@ -444,7 +444,7 @@ def ensure_discovery(mac):
             "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/step",
             "unit_of_measurement": "L/pulse",
             "icon": "mdi:counter",
-            "entity_category": "config",
+            "entity_category": "diagnostic",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{sidS}/config", confS, retain=True)
@@ -532,7 +532,7 @@ def ensure_discovery(mac):
             "unique_id": t_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/lines_in/line_{i}",
             "icon": "mdi:label",
-            "entity_category": "config",
+            "entity_category": "diagnostic",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{t_id}/config", t_conf, retain=True)
