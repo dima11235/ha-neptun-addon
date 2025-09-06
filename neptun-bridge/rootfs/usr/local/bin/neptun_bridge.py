@@ -473,6 +473,7 @@ def ensure_discovery(mac):
             "min": 0,
             "max": 1000000000,
             "step": 1,
+            "mode": "box",
             "entity_category": "config",
             "device": device
         }
