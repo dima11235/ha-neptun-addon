@@ -339,28 +339,27 @@ def ensure_discovery(mac):
     
     device, safe_mac, dev_id = make_device(mac)
     
-    # Two stateless buttons for valve control
-    btn_open_id = f"neptun_{safe_mac}_valve_open"
-    btn_open_conf = {
-        "name": f"Valve Open",
-        "unique_id": btn_open_id,
+    # Switch entity for valve control (replaces two stateless buttons)
+    sw_valve_id = f"neptun_{safe_mac}_valve"
+    sw_valve_conf = {
+        "name": f"Valve",
+        "unique_id": sw_valve_id,
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/valve/set",
-        "payload_press": "1",
-        "icon": "mdi:water-pump",
+        "state_topic": f"{TOPIC_PREFIX}/{mac}/state/valve_open",
+        "payload_on": "1",
+        "payload_off": "0",
+        "icon": "mdi:valve",
         "device": device
     }
-    pub(f"{DISCOVERY_PRE}/button/{btn_open_id}/config", btn_open_conf, retain=True)
-
-    btn_close_id = f"neptun_{safe_mac}_valve_close"
-    btn_close_conf = {
-        "name": f"Valve Close",
-        "unique_id": btn_close_id,
-        "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/valve/set",
-        "payload_press": "0",
-        "icon": "mdi:water-pump-off",
-        "device": device
-    }
-    pub(f"{DISCOVERY_PRE}/button/{btn_close_id}/config", btn_close_conf, retain=True)
+    pub(f"{DISCOVERY_PRE}/switch/{sw_valve_id}/config", sw_valve_conf, retain=True)
+    # Publish empty payloads to old button discovery topics to remove them (cleanup)
+    try:
+        btn_open_id = f"neptun_{safe_mac}_valve_open"
+        btn_close_id = f"neptun_{safe_mac}_valve_close"
+        client.publish(f"{DISCOVERY_PRE}/button/{btn_open_id}/config", b"", retain=True)
+        client.publish(f"{DISCOVERY_PRE}/button/{btn_close_id}/config", b"", retain=True)
+    except Exception:
+        pass
 
     # Stateless button: Floor Wash (opens valve and enables dry mode)
     btn_wash_id = f"neptun_{safe_mac}_floor_wash"
@@ -907,6 +906,11 @@ def on_message(c, userdata, msg):
                     return
                 c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log("CMD valve ->", mac, "open" if want_open else "close")
+                # Optimistic local state update for HA switch UX
+                st["valve_open"] = want_open
+                state_cache[mac] = st
+                base = f"{TOPIC_PREFIX}/{mac}"
+                pub(f"{base}/state/valve_open", "1" if want_open else "0", retain=False)
             elif cmd[:1] == ["floor_wash"]:
                 # Enable/disable dry mode and keep valve open (per observed frames)
                 st = state_cache.get(mac, {})
