@@ -362,6 +362,18 @@ def ensure_discovery(mac):
     }
     pub(f"{DISCOVERY_PRE}/button/{btn_close_id}/config", btn_close_conf, retain=True)
 
+    # Stateless button: Floor Wash (opens valve and enables dry mode)
+    btn_wash_id = f"neptun_{safe_mac}_floor_wash"
+    btn_wash_conf = {
+        "name": f"Floor Wash",
+        "unique_id": btn_wash_id,
+        "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/floor_wash/set",
+        "payload_press": "1",
+        "icon": "mdi:mop",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/button/{btn_wash_id}/config", btn_wash_conf, retain=True)
+
     # Add MQTT switch for Dry Flag
     obj_id2 = f"neptun_{safe_mac}_dry_flag"
     conf2 = {
@@ -851,6 +863,28 @@ def on_message(c, userdata, msg):
                     return
                 c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log("CMD valve ->", mac, "open" if want_open else "close")
+            elif cmd[:1] == ["floor_wash"]:
+                # Enable dry mode and open valve in a single settings frame
+                st = state_cache.get(mac, {})
+                frame = compose_settings_frame(
+                    open_valve=True,
+                    dry=True,
+                    close_on_offline=bool(st.get("flag_cl_valve", False)),
+                    line_cfg=int(st.get("line_in_cfg", 0))
+                )
+                pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
+                if not pref:
+                    log("No cloud prefix known for", mac, ", waiting for incoming frame to learn it")
+                    return
+                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
+                log("CMD floor_wash ->", mac, "trigger")
+                # Optimistic local update for HA UX
+                st["dry_flag"] = True
+                st["valve_open"] = True
+                state_cache[mac] = st
+                base = f"{TOPIC_PREFIX}/{mac}"
+                pub(f"{base}/settings/dry_flag", "on", retain=True)
+                pub(f"{base}/state/valve_open", "1", retain=False)
             elif cmd[:1] == ["dry_flag"]:
                 pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
                 up = pl.upper()
