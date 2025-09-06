@@ -599,7 +599,7 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "battery",
-        "icon": "mdi:battery-alert",
+        "icon": "mdi:car-battery",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_batt_id}/config", mod_batt_conf, retain=True)
@@ -613,7 +613,7 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "problem",
-        "icon": "mdi:battery-alert",
+        "icon": "mdi:battery",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_batt_id}/config", sens_batt_conf, retain=True)
