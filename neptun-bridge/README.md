@@ -1,121 +1,139 @@
-﻿# Neptun Local Bridge (Home Assistant add-on)
+﻿# Neptun Local Bridge (Home Assistant add‑on)
 
-Мини-аддон, который поднимает локальный Mosquitto без аутентификации и парсит пакеты Neptun, а затем бриджит нужные топики в стандартный MQTT Home Assistant с аутентификацией. Сущности в HA создаются через MQTT Discovery.
+Локальный MQTT‑мост и парсер бинарных кадров Neptun AquaControl. Работает рядом с Home Assistant: принимает кадры из «облака» Neptun, валидирует, раскладывает по понятным MQTT‑топикам и автоматически объявляет сущности в HA (MQTT Discovery). Также отправляет команды обратно на устройство через облачный MQTT‑канал.
 
-Что делает аддон
-- Поднимает локальный MQTT на настраиваемом порту (по умолчанию 2883), без аутентификации.
-- Принимает кадры от Neptun в `CLOUD_PREFIX/<MAC>/from` и публикует разобранные данные в `TOPIC_PREFIX/<MAC>/...`.
-- Через Mosquitto bridge пересылает в HA брокер Discovery и состояния; команды из HA возвращает на локальный брокер.
-- Создает в HA: переключатель клапана, датчики протечки и показания счетчиков (в т.ч. литры) через MQTT Discovery.
+## Кратко о возможностях
+- Приём и разбор кадров Neptun: 0x52 (system_state), 0x53 (sensor_state), 0x57 (settings), 0x43 (counters) с проверкой CRC16‑CCITT.
+- Публикация состояния в `neptun/<MAC>/**` + автодискавери сущностей в `homeassistant/**`.
+- Управление из HA: клапан, «сухой режим» (Floor Wash), «закрывать при оффлайне», типы линий (sensor/counter), запись счётчиков и шага.
+- Диагностика: «raw» кадры по типам и именам; подробные логи при `NB_DEBUG=true`.
 
-Установка
-- Добавьте репозиторий аддонов и установите “Neptun Local Bridge”.
-- В конфигурации аддона укажите параметры (см. ниже). Обычно достаточно задать учетные данные HA MQTT.
-- Запустите аддон. Сущности появятся автоматически (MQTT Discovery должно быть включено в HA).
-- Перенаправьте исходящее подключение устройства Neptun к облаку на локальный брокер аддона.
-  Трафик на `185.76.147.189:1883` (облачный MQTT) должен уходить на `IP_HA:<listen_port>` (по умолчанию `2883`).
-  Пример для Keenetic (CLI), где `10.77.11.200` — IP Home Assistant в вашей сети:
+## Требования
+- Home Assistant с брокером MQTT (обычно `core-mosquitto`) для приёма дискавери/состояний.
+- Возможность направить исходящее MQTT‑соединение устройства Neptun на локальный брокер аддона (порт по умолчанию 2883), либо настроить бридж на роутере.
+
+## Установка
+1) Добавьте репозиторий аддонов в Home Assistant и установите «Neptun Local Bridge».
+2) В настройках аддона укажите параметры (см. ниже). Часто достаточно задать учетные данные HA MQTT (`ha_mqtt.user/password`).
+3) Запустите аддон. Сущности появятся автоматически (MQTT Discovery должно быть включено в HA).
+4) Перенаправьте исходящий MQTT‑трафик устройства Neptun с облака на локальный брокер аддона.
+   - Облачный адрес: `185.76.147.189:1883`
+   - Локальный адрес: `IP_HA:<listen_port>` (по умолчанию `2883`)
+
+Пример для роутера Keenetic (CLI), где `192.168.1.200` — IP Home Assistant:
 ```
 ip static tcp 185.76.147.189/32 1883 192.168.1.200 2883
 system configuration save
 ```
-- Убедитесь, что:
-  - адрес IP_HA указан корректно и доступен из подсети устройства Neptun;
-  - порт совпадает с `mqtt.listen_port` в настройках аддона (если меняли дефолт 2883 — используйте его);
-  - правило применяется для исходящего трафика устройства (иногда нужно включить hairpin/loopback NAT или правила policy?based NAT).
+Убедитесь, что:
+- адрес `IP_HA` доступен из подсети устройства Neptun;
+- порт совпадает с `mqtt.listen_port` в настройках аддона (если меняли дефолт 2883 — используйте его);
+- при необходимости включены hairpin/loopback NAT или настроен policy‑based NAT.
 
-Параметры (options)
+## Параметры аддона (options)
 ```
 mqtt:
   listen_port: 2883          # Порт локального брокера внутри аддона
   allow_anonymous: true      # Разрешить анонимные подключения (по умолчанию true)
-  user: ""                   # Опционально: пользователь локального брокера
-  password: ""               # Опционально: пароль локального брокера
+  user: ""                   # (опционально) пользователь локального брокера
+  password: ""               # (опционально) пароль локального брокера
 ha_mqtt:
-  host: core-mosquitto       # Брокер HA (по умолчанию core-mosquitto)
+  host: "core-mosquitto"     # Брокер HA (по умолчанию core-mosquitto)
   port: 1883                 # Порт брокера HA
-  user: "!secret mqtt_username"  # Пользователь HA MQTT (поддерживается !secret)
-  password: "!secret mqtt_password"  # Пароль HA MQTT (поддерживается !secret)
+  user: "!secret mqtt_username"      # Пользователь HA MQTT (!secret поддерживается)
+  password: "!secret mqtt_password"  # Пароль HA MQTT (!secret поддерживается)
 bridge:
-  cloud_prefix: ""           # Пусто — автодискавери; если указано — используется принудительно
-  topic_prefix: "neptun"     # Префикс публикаций состояния/команд
+  cloud_prefix: ""           # Пусто — автообнаружение; если задан — используется принудительно
+  topic_prefix: "neptun"     # Базовый префикс локальных топиков состояния/команд
   discovery_prefix: "homeassistant"  # Префикс MQTT Discovery
   retain: true               # Retain по умолчанию для публикаций
   debug: false               # Дополнительный лог в stderr
 ```
 
-Автообнаружение
-- При `cloud_prefix: ""` аддон подписывается на `+/+/from` и автоматически определяет cloud-префикс и MAC по первому входящему сообщению (`<prefix>/<MAC>/from`).
-- Команды в устройство отправляются на `<prefix>/<MAC>/to`. Если префикс еще не обнаружен (не было входящих сообщений) — команда будет пропущена до появления первого кадра.
-- Если хотите отправлять команды сразу, задайте `cloud_prefix` явно — тогда будет использоваться только он.
-
-Secrets
-- В полях `mqtt.user/password` и `ha_mqtt.user/password` можно использовать `!secret KEY`.
-- Значения читаются из файла `/config/secrets.yaml` (через Supervisor у аддона есть доступ к `/config`).
-- Дополнительно поддерживается единая запись `mqtt_server: mqtt://<host>:<port>` — при наличии переопределяет `ha_mqtt.host/port`.
-- Пример `secrets.yaml`:
+Поддерживаются секреты HA (`/config/secrets.yaml`):
 ```
 mqtt_username: myuser
 mqtt_password: mypass
 mqtt_server: mqtt://core-mosquitto:1883
 ```
 
-Сетевое взаимодействие
-- Локальный Mosquitto слушает `listen_port` (по умолчанию 2883) внутри контейнера аддона.
-- Бридж в HA настраивается автоматически при наличии `ha_mqtt.user/password` и публикует:
-  - Исходящие в HA: `<topic_prefix>/#` и `<discovery_prefix>/#`.
-  - Входящие из HA в локальный: `<topic_prefix>/+/cmd/#` (команды для устройства).
-- Рекомендуемый хост HA MQTT: `core-mosquitto`; порт: `1883`.
+## Переменные окружения (внутри контейнера)
+- `NB_TOPIC_PREFIX` (default `neptun`)
+- `NB_DISCOVERY_PREFIX` (default `homeassistant`)
+- `NB_CLOUD_PREFIX` (если известен заранее; иначе мост выучит по входящим кадрам)
+- `NB_RETAIN` (`true`/`false`), `NB_DEBUG` (`true`/`false`)
 
-Основные топики
-- Вход устройства: `CLOUD_PREFIX/<MAC>/from` (сырые кадры Neptun).
-- Публикации состояния: `TOPIC_PREFIX/<MAC>/**` (сенсоры, счетчики, состояния).
-- Команды из HA: `TOPIC_PREFIX/<MAC>/cmd/valve/set` со значениями `1/0` (`ON/OFF`, `OPEN/CLOSE`).
-- MQTT Discovery публикуется под `DISCOVERY_PREFIX/**`.
+## Как это работает (обзор топиков)
+- Вход устройства: `CLOUD_PREFIX/<MAC>/from` — сырые бинарные кадры Neptun.
+- Публикации состояния: `neptun/<MAC>/**` — сенсоры, счётчики, статусы.
+- Команды из HA: `neptun/<MAC>/cmd/**` — настройки, клапан, линии, счётчики.
+- Авто‑объявления HA: `homeassistant/**` (или ваш `discovery_prefix`).
 
-Примечания
-- Для работы без стороннего брокера устройство Neptun должно уметь подключаться к локальному брокеру аддона.
-- Если локальный брокер нужно защитить, задайте `mqtt.user/password` и `allow_anonymous: false`.
-- Отладка: включите `bridge.debug: true` — аддон начнет печатать подробные сообщения в лог.
+При `cloud_prefix: ""` аддон подписывается на `+/+/from` и автоматически определяет префикс и MAC по первому входящему сообщению. Команды в устройство отправляются на `<prefix>/<MAC>/to`. Если префикс ещё неизвестен, команда откладывается до первого кадра.
 
+## Сущности Home Assistant
+Управление (switch/select/number):
+- Switch `Valve` — открыть/закрыть кран
+  - cmd: `neptun/<mac>/cmd/valve/set` (`1`/`0`), state: `neptun/<mac>/state/valve_open`
+- Switch `Floor Wash` (бывш. Dry Flag) — включает/выключает «сухой режим»
+  - cmd: `neptun/<mac>/cmd/dry_flag/set` (`on`/`off`), state: `neptun/<mac>/settings/dry_flag`
+- Switch `Close On Offline` — закрывать кран при потере датчиков
+  - cmd: `neptun/<mac>/cmd/close_on_offline/set` (`close`/`open`), state: `neptun/<mac>/settings/close_valve_flag`
+- Select `Line i Type` (i=1..4) — тип входа линии (sensor/counter)
+  - cmd: `neptun/<mac>/cmd/line_i_type/set`, state: `neptun/<mac>/settings/lines_in/line_i`
+- Number (mode=box) `Line i Counter (set)` — установка счётчика в литрах
+  - cmd: `neptun/<mac>/cmd/counters/line_i/value/set`, state: `neptun/<mac>/counters/line_i/value`
+- Number (mode=box) `Line i Step (set)` — шаг в L/импульс
+  - cmd: `neptun/<mac>/cmd/counters/line_i/step/set`, state: `neptun/<mac>/counters/line_i/step`
 
+Сенсоры (read‑only):
+- Проводные утечки `Line i Leak` (i=1..4): `neptun/<mac>/lines_status/line_i`
+- Беспроводные датчики (динамически): Battery, RSSI, Leak
+- Счётчики воды: литры `neptun/<mac>/counters/line_i/value` + производный sensor м³ (через value_template)
+- `Module Status` (текст): `neptun/<mac>/state/status_name`
+- `Module Alert` (binary, problem): `neptun/<mac>/settings/status/module_alert` (yes/no — любой проблемный бит)
+- `Module Lost` (binary, problem): `neptun/<mac>/settings/status/module_lost` — yes, если нет данных > 120 секунд
+- `Device Time` (timestamp): `neptun/<mac>/device_time` (TLV 0x44, локальное время устройства, конвертируется в ISO UTC)
+- `Device Time Drift` (diagnostic): `neptun/<mac>/device_time_drift_seconds` — разница «локальные часы хоста − время устройства» (в секундах)
 
-## Дополнения к функциональности (актуально для 0.1.45)
+## Команды на устройство (MQTT)
+- Клапан: `neptun/<mac>/cmd/valve/set` → `1`/`0`
+- Сухой режим: `neptun/<mac>/cmd/dry_flag/set` → `on`/`off`
+- Закрыть при оффлайне: `neptun/<mac>/cmd/close_on_offline/set` → `close`/`open`
+- Тип линии: `neptun/<mac>/cmd/line_<i>_type/set` → `sensor`/`counter`
+- Счётчик (литры): `neptun/<mac>/cmd/counters/line_<i>/value/set` → целое значение L
+- Шаг счётчика: `neptun/<mac>/cmd/counters/line_<i>/step/set` → 1..255 (L/импульс)
 
-Ниже перечислено, что добавлено/уточнено по сравнению с ранними версиями. Эти пункты не меняют порядок установки и общие принципы работы, а дополняют их.
+Для записи счётчиков мост формирует кадр 0x57/0x43 на `<cloud_prefix>/<MAC>/to`. Для неизменяемых линий подставляются последние известные «сырые» значение/шаг, чтобы ничего не обнулить.
 
-- Управление (HA entities):
-  - Переключатель клапана `Valve` (cmd `neptun/<MAC>/cmd/valve/set`, state `neptun/<MAC>/state/valve_open`).
-  - Переключатель `Floor Wash` (бывший Dry Flag) — включает/выключает сухой режим контроллера (cmd `.../cmd/dry_flag/set`, state `.../settings/dry_flag`).
-  - Переключатель `Close On Offline` — закрывать кран при потере датчиков (cmd `.../cmd/close_on_offline/set`, state `.../settings/close_valve_flag`).
-  - Селект `Line i Type (1..4)` — тип входа линии (sensor/counter) (cmd `.../cmd/line_i_type/set`, state `.../settings/lines_in/line_i`).
-  - Числовые поля (mode=box):
-    - `Line i Counter (set)` — установка счётчика в литрах (cmd `.../cmd/counters/line_i/value/set`).
-    - `Line i Step (set)` — шаг в L/импульс (cmd `.../cmd/counters/line_i/step/set`).
+## Протокол и обработка
+- Поддерживаются кадры: 0x52 (system_state), 0x53 (sensor_state), 0x57 (settings), 0x43 (counters).
+- TLV 0x44 — «время устройства» приходит в ЛОКАЛЬНОМ времени устройства. Мост конвертирует его в ISO UTC (с учётом локального часового пояса хоста) и публикует также epoch.
+- Module Lost: если присутствует TLV 0x44 — сравнение делается с локальным временем; если 0x44 нет — по времени получения кадра. Порог — 120 секунд.
+- Батарея беспроводных датчиков: значения > 200 (похоже на «вольтовую шкалу») отбрасываются и не публикуются; валидные проценты 0..100 — публикуются.
 
-- Сенсоры:
-  - `Module Status` (текстовое описание статуса модуля) — `neptun/<MAC>/state/status_name`.
-  - `Module Alert` (binary, device_class: problem) — включается при любом проблемном бите статуса — `neptun/<MAC>/settings/status/module_alert` (yes/no).
-  - `Device Time` (timestamp) — время контроллера из TLV 0x44; публикуется как ISO UTC с учётом локального часового пояса.
-  - `Device Time Drift` (diagnostic) — разница между локальными часами хоста и временем устройства, сек — `neptun/<MAC>/device_time_drift_seconds`.
-  - `Module Lost` (binary, problem) — yes, если не было данных более 120 секунд. Предпочтительно используется время из TLV 0x44; при его отсутствии — время получения кадра.
+## Диагностика
+- Включите `debug: true` в настройках аддона (или `NB_DEBUG=true`) — мост начнет печатать отладочные логи в stderr и шире подписываться на топики.
+- «Raw» данные публикуются в:
+  - `neptun/<mac>/raw/*` (hex/base64/len)
+  - группировки по типу/имени: `neptun/<mac>/raw/by_type/*`, `neptun/<mac>/raw/by_name/*`
 
-- Протокол/обработка:
-  - Поддерживаются кадры 0x52 (system_state), 0x53 (sensor_state), 0x57 (settings), 0x43 (counters).
-  - TLV 0x44 — время устройства: приходит в локальном времени; конвертируем в UTC, публикуем ISO и epoch, считаем дрейф.
-  - Батарея беспроводных датчиков: значения > 200 (похоже на «вольтовую шкалу») отбрасываются и не публикуются; валидные проценты 0..100 — публикуются.
-  - Запись счётчиков: формируется кадр 0x57/0x43 на `<cloud_prefix>/<MAC>/to`; для не изменяемых линий подставляются последние известные «сырые» значения/шаги.
+## Ограничения и заметки
+- Настройка Wi‑Fi самого Neptun НЕ выполняется через MQTT. Используйте штатное приложение/режим точки доступа.
+- Если в HA видите старые сущности после обновления — перезапустите интеграцию MQTT или дождитесь обновления discovery.
 
-- Диагностика:
-  - Включение `NB_DEBUG=true` добавляет расширенные логи подписки/публикаций.
-  - «Raw» кадры публикуются в `neptun/<MAC>/raw/*`, а также сгруппированы по типу и имени (`raw/by_type/*`, `raw/by_name/*`).
+## Частые вопросы
+- «Module Lost» срабатывает слишком рано?
+  — Порог увеличен до 120 секунд. Если 0x44 отсутствует или часы устройства «уехали» в будущее > 5 минут, используется время получения кадра.
+- Батарея скачет между ~24% и ~240%?
+  — Значения > 200 считаются «вольтовой шкалой» и не публикуются; остаются стабильные проценты 0..100.
+- Не вижу switch для клапана, а только две кнопки?
+  — В новых версиях используется один switch `Valve`. Старые кнопки удаляются discovery‑публикацией с пустым payload.
 
-> Важно: настройка Wi?Fi самого Neptun не производится через MQTT. Используйте штатное приложение/режим точки доступа.
-
-## Краткая история изменений
-
-- 0.1.45 — корректная обработка `device_time` как локального времени; исправлен deprecation `utcfromtimestamp`.
-- 0.1.44 — добавлены сенсоры `Module Status` (текст) и `Module Alert` (binary).
-- 0.1.41–0.1.43 — `Module Lost`, парсинг TLV 0x44 (время), `Device Time Drift` и сопутствующие улучшения.
-- 0.1.36–0.1.39 — единый переключатель `Valve`, переименование Dry Flag > `Floor Wash`, числовые поля ввода для счётчика и шага.
-
+## История (коротко)
+- 0.1.48 — правки иконки Module Lost; технические улучшения.
+- 0.1.47 — порог Module Lost 120с; обновление README.
+- 0.1.45–0.1.46 — корректная обработка локального `device_time` (TLV 0x44); фиксы депрекейтов datetime.
+- 0.1.44 — `Module Status` (текст) и `Module Alert` (binary).
+- 0.1.41–0.1.43 — `Module Lost`, `Device Time Drift`, улучшения диагностики.
+- 0.1.36–0.1.39 — switch `Valve`, Floor Wash (бывш. Dry Flag), number (mode=box) для счётчика/шага, типы линий (select).
