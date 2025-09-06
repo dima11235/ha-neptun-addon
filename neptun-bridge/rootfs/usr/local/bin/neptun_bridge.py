@@ -551,6 +551,31 @@ def ensure_discovery(mac):
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{leak_id}/config", leak_conf, retain=True)
 
+    # Module Status (text)
+    mod_status_id = f"neptun_{safe_mac}_module_status"
+    mod_status_conf = {
+        "name": f"Module Status",
+        "unique_id": mod_status_id,
+        "state_topic": f"{base_topic}/state/status_name",
+        "icon": "mdi:alert-circle-outline",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/sensor/{mod_status_id}/config", mod_status_conf, retain=True)
+
+    # Module Alert (any problem bit)
+    mod_alert_id = f"neptun_{safe_mac}_module_alert"
+    mod_alert_conf = {
+        "name": f"Module Alert",
+        "unique_id": mod_alert_id,
+        "state_topic": f"{base_topic}/settings/status/module_alert",
+        "payload_on": "yes",
+        "payload_off": "no",
+        "device_class": "problem",
+        "icon": "mdi:alert-circle",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_alert_id}/config", mod_alert_conf, retain=True)
+
     # Valve Closed (inverse of valve_open)
     valve_closed_id = f"neptun_{safe_mac}_valve_closed"
     valve_closed_conf = {
@@ -725,6 +750,7 @@ def publish_system(mac_from_topic, buf: bytes):
             "sensors_lost": "yes" if (st.get("status",0)&0x08) else "no",
             "battery_discharge_in_module": "yes" if (st.get("status",0)&0x02) else "no",
             "battery_discharge_in_sensor": "yes" if (st.get("status",0)&0x04) else "no",
+            "module_alert": "yes" if (st.get("status",0) != 0) else "no",
         },
         "dry_flag": "on" if st.get("dry_flag") else "off",
         "lines_in": map_lines_in(st.get("line_in_cfg",0)),
@@ -739,6 +765,7 @@ def publish_system(mac_from_topic, buf: bytes):
     pub(f"{base}/settings/status/sensors_lost", settings["status"]["sensors_lost"], retain=True)
     pub(f"{base}/settings/status/battery_discharge_in_module", settings["status"]["battery_discharge_in_module"], retain=True)
     pub(f"{base}/settings/status/battery_discharge_in_sensor", settings["status"]["battery_discharge_in_sensor"], retain=True)
+    pub(f"{base}/settings/status/module_alert", settings["status"]["module_alert"], retain=True)
     pub(f"{base}/settings/dry_flag", settings["dry_flag"], retain=True)
     pub(f"{base}/settings/relay_count", settings["relay_count"], retain=True)
     pub(f"{base}/settings/sensors_count", settings["sensors_count"], retain=True)
