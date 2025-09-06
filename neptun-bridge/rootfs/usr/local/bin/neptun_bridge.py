@@ -26,6 +26,7 @@ TOPIC_PREFIX   = os.getenv("NB_TOPIC_PREFIX", "neptun")
 DISCOVERY_PRE  = os.getenv("NB_DISCOVERY_PREFIX", "homeassistant")
 RETAIN_DEFAULT = os.getenv("NB_RETAIN", "true").lower() == "true"
 DEBUG          = os.getenv("NB_DEBUG", "false").lower() == "true"
+CAL_FILE       = os.getenv("NB_CAL_FILE", "/config/neptun_counters.json")
 
 MQTT_HOST = "127.0.0.1"
 # Prefer NB_MQTT_PORT (from options), fallback to MQTT_LISTEN_PORT
@@ -120,6 +121,64 @@ def normalize_battery(v):
     if x < 0: x = 0
     if x > 100: x = 100
     return x
+
+# ===== Calibration store for counters (per-MAC) =====
+# Structure on disk (JSON):
+# { "<mac>": { "line_1": {"offset": int, "abs": int|null, "step": int|null}, ... } }
+counter_cal = {}
+
+def _load_cal():
+    global counter_cal
+    try:
+        with open(CAL_FILE, "r", encoding="utf-8") as f:
+            counter_cal = json.load(f)
+            if not isinstance(counter_cal, dict):
+                counter_cal = {}
+    except Exception:
+        counter_cal = {}
+
+def _save_cal():
+    try:
+        with open(CAL_FILE, "w", encoding="utf-8") as f:
+            json.dump(counter_cal, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        log("Failed to save calibration:", e)
+
+def _cal_line(mac: str, idx: int) -> dict:
+    m = counter_cal.setdefault(mac, {})
+    k = f"line_{idx}"
+    return m.setdefault(k, {"offset": 0, "abs": None, "step": None})
+
+def cal_set_value(mac: str, idx: int, desired: int, last_raw: int|None):
+    rec = _cal_line(mac, idx)
+    if isinstance(last_raw, int):
+        rec["offset"] = int(desired) - int(last_raw)
+        rec["abs"] = None
+    else:
+        rec["abs"] = int(desired)
+        rec["offset"] = 0
+    _save_cal()
+    return rec
+
+def cal_set_step(mac: str, idx: int, step: int):
+    rec = _cal_line(mac, idx)
+    rec["step"] = int(step)
+    _save_cal()
+    return rec
+
+def cal_effective(mac: str, idx: int, raw_val: int, raw_step: int) -> tuple[int,int]:
+    rec = _cal_line(mac, idx)
+    # effective value: abs if set; else raw + offset
+    if rec.get("abs") is not None:
+        val = int(rec.get("abs", 0))
+    else:
+        val = int(raw_val) + int(rec.get("offset", 0))
+    # effective step: override if set
+    stp = int(rec.get("step", 0) or raw_step)
+    return val, stp
+
+# Load calibration at startup
+_load_cal()
 
 # Unified builder for Home Assistant device descriptor
 def make_device(mac: str):
@@ -398,6 +457,38 @@ def ensure_discovery(mac):
         }
         pub(f"{DISCOVERY_PRE}/sensor/{sidS}/config", confS, retain=True)
 
+        # MQTT Number to set Counter Value (liters)
+        numV_id = f"neptun_{safe_mac}_line_{i}_counter_set"
+        numV_conf = {
+            "name": f"Line {i} Counter (set)",
+            "unique_id": numV_id,
+            "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/counters/line_{i}/value/set",
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/value",
+            "unit_of_measurement": "L",
+            "icon": "mdi:water",
+            "min": 0,
+            "max": 1000000000,
+            "step": 1,
+            "device": device
+        }
+        pub(f"{DISCOVERY_PRE}/number/{numV_id}/config", numV_conf, retain=True)
+
+        # MQTT Number to set Counter Step (L/pulse)
+        numS_id = f"neptun_{safe_mac}_line_{i}_step_set"
+        numS_conf = {
+            "name": f"Line {i} Step (set)",
+            "unique_id": numS_id,
+            "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/counters/line_{i}/step/set",
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/step",
+            "unit_of_measurement": "L/pulse",
+            "icon": "mdi:counter",
+            "min": 1,
+            "max": 255,
+            "step": 1,
+            "device": device
+        }
+        pub(f"{DISCOVERY_PRE}/number/{numS_id}/config", numS_conf, retain=True)
+
     # Wired leak sensors (lines 1..4)
     for i in range(1,5):
         wired_id = f"neptun_{safe_mac}_line_{i}_leak"
@@ -630,10 +721,16 @@ def publish_system(mac_from_topic, buf: bytes):
     if sensors_status: parsedCfg["sensors_status"] = sensors_status
     pub(f"{base}/config/json", parsedCfg, retain=True)
 
+    # Keep last raw counters for calibration math in command handlers
+    raw_list = []
     for idx, c in enumerate(st.get("counters", []), start=1):
-        val = int(c.get("value",0)); step = int(c.get("step",1)) or 1
-        pub(f"{base}/counters/line_{idx}/value", val, retain=False)
-        pub(f"{base}/counters/line_{idx}/step", step, retain=False)
+        raw_val = int(c.get("value",0)); raw_step = int(c.get("step",1)) or 1
+        eff_val, eff_step = cal_effective(mac, idx, raw_val, raw_step)
+        pub(f"{base}/counters/line_{idx}/value", eff_val, retain=False)
+        pub(f"{base}/counters/line_{idx}/step", eff_step, retain=False)
+        raw_list.append((raw_val, raw_step))
+    # Cache last raw
+    prev["counters_raw"] = raw_list
 
     # Publish wired lines leak status (on/off)
     wired = st.get("wired_states", [])
@@ -883,6 +980,47 @@ def on_message(c, userdata, msg):
                     return
                 c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log(f"CMD line_{idx}_type ->", mac, "counter" if want_counter else "sensor")
+
+            elif len(cmd) >= 3 and cmd[0] == "counters" and cmd[1].startswith("line_"):
+                # Topics:
+                # neptun/<mac>/cmd/counters/line_<i>/value/set  (payload=int liters)
+                # neptun/<mac>/cmd/counters/line_<i>/step/set   (payload=int L/pulse)
+                try:
+                    idx = int(cmd[1].split("_")[1])
+                except Exception:
+                    idx = None
+                if idx is None or not (1 <= idx <= 4):
+                    return
+                action = cmd[2]
+                payload = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
+                base = f"{TOPIC_PREFIX}/{mac}"
+                if action == "value" and len(cmd) >= 4 and cmd[3] == "set":
+                    try:
+                        desired = int(float(payload))
+                    except Exception:
+                        return
+                    last_raw = None
+                    try:
+                        lst = state_cache.get(mac, {}).get("counters_raw", [])
+                        if 1 <= idx <= len(lst):
+                            last_raw = int(lst[idx-1][0])
+                    except Exception:
+                        last_raw = None
+                    cal_set_value(mac, idx, desired, last_raw)
+                    # Publish effective immediately if we know last raw
+                    if last_raw is not None:
+                        eff_val, eff_step = cal_effective(mac, idx, last_raw, state_cache.get(mac, {}).get("counters_raw", [(0,1)]*4)[idx-1][1])
+                        pub(f"{base}/counters/line_{idx}/value", eff_val, retain=False)
+                    log(f"CMD counters line_{idx} value ->", mac, desired)
+                elif action == "step" and len(cmd) >= 4 and cmd[3] == "set":
+                    try:
+                        step = int(float(payload))
+                        if step <= 0: return
+                    except Exception:
+                        return
+                    cal_set_step(mac, idx, step)
+                    pub(f"{base}/counters/line_{idx}/step", step, retain=False)
+                    log(f"CMD counters line_{idx} step ->", mac, step)
 
                 # Optimistic local state update for select entity
                 st["line_in_cfg"] = new_cfg
