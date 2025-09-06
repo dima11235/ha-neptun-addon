@@ -374,7 +374,7 @@ def ensure_discovery(mac):
         "payload_off": "off",
         "qos": 0,
         "retain": False,
-        "icon": "mdi:mop",
+        "icon": "mdi:water-circle",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/switch/{obj_id2}/config", conf2, retain=True)
