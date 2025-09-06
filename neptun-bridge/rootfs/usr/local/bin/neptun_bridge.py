@@ -632,7 +632,7 @@ def ensure_discovery(mac):
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_lost_id}/config", sens_lost_conf, retain=True)
 
-    # Module Lost (no data received > 60s), locally computed
+    # Module Lost (no data received > 120s), locally computed
     mod_lost_id = f"neptun_{safe_mac}_module_lost"
     mod_lost_conf = {
         "name": f"Module Lost",
@@ -1184,11 +1184,11 @@ def main():
                             now_local = now + off_s
                             # If device clock is wildly in the future (>5 min), ignore it
                             if dev_ts - now_local > 300:
-                                lost = (now - last_seen.get(mac, 0)) > 60
+                                lost = (now - last_seen.get(mac, 0)) > 120
                             else:
-                                lost = (now_local - dev_ts) > 60
+                                lost = (now_local - dev_ts) > 120
                         else:
-                            lost = (now - last_seen.get(mac, 0)) > 60
+                            lost = (now - last_seen.get(mac, 0)) > 120
                         base = f"{TOPIC_PREFIX}/{mac}"
                         pub(f"{base}/settings/status/module_lost", "yes" if lost else "no", retain=True)
                     except Exception:
