@@ -374,6 +374,18 @@ def ensure_discovery(mac):
     }
     pub(f"{DISCOVERY_PRE}/button/{btn_wash_id}/config", btn_wash_conf, retain=True)
 
+    # Stateless button: Floor Wash Off (disable dry mode, keep valve open)
+    btn_wash_off_id = f"neptun_{safe_mac}_floor_wash_off"
+    btn_wash_off_conf = {
+        "name": f"Floor Wash Off",
+        "unique_id": btn_wash_off_id,
+        "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/floor_wash/set",
+        "payload_press": "0",
+        "icon": "mdi:mop-off",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/button/{btn_wash_off_id}/config", btn_wash_off_conf, retain=True)
+
     # Add MQTT switch for Dry Flag
     obj_id2 = f"neptun_{safe_mac}_dry_flag"
     conf2 = {
@@ -447,6 +459,38 @@ def ensure_discovery(mac):
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{sidS}/config", confS, retain=True)
+
+        # Number entity to SET counter value in liters
+        numV_id = f"neptun_{safe_mac}_line_{i}_counter_set"
+        numV_conf = {
+            "name": f"Line {i} Counter (set)",
+            "unique_id": numV_id,
+            "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/counters/line_{i}/value/set",
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/value",
+            "unit_of_measurement": "L",
+            "icon": "mdi:water",
+            "min": 0,
+            "max": 1000000000,
+            "step": 1,
+            "device": device
+        }
+        pub(f"{DISCOVERY_PRE}/number/{numV_id}/config", numV_conf, retain=True)
+
+        # Number entity to SET counter step in L/pulse
+        numS_id = f"neptun_{safe_mac}_line_{i}_step_set"
+        numS_conf = {
+            "name": f"Line {i} Step (set)",
+            "unique_id": numS_id,
+            "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/counters/line_{i}/step/set",
+            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/step",
+            "unit_of_measurement": "L/pulse",
+            "icon": "mdi:counter",
+            "min": 1,
+            "max": 255,
+            "step": 1,
+            "device": device
+        }
+        pub(f"{DISCOVERY_PRE}/number/{numS_id}/config", numS_conf, retain=True)
 
     # Wired leak sensors (lines 1..4)
     for i in range(1,5):
@@ -864,11 +908,14 @@ def on_message(c, userdata, msg):
                 c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log("CMD valve ->", mac, "open" if want_open else "close")
             elif cmd[:1] == ["floor_wash"]:
-                # Enable dry mode and open valve in a single settings frame
+                # Enable/disable dry mode and keep valve open (per observed frames)
                 st = state_cache.get(mac, {})
+                pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
+                up = pl.upper()
+                want_on = up in ("1","ON","TRUE","YES","OPEN") or pl == "1"
                 frame = compose_settings_frame(
                     open_valve=True,
-                    dry=True,
+                    dry=want_on,
                     close_on_offline=bool(st.get("flag_cl_valve", False)),
                     line_cfg=int(st.get("line_in_cfg", 0))
                 )
@@ -877,13 +924,13 @@ def on_message(c, userdata, msg):
                     log("No cloud prefix known for", mac, ", waiting for incoming frame to learn it")
                     return
                 c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
-                log("CMD floor_wash ->", mac, "trigger")
+                log("CMD floor_wash ->", mac, ("on" if want_on else "off"))
                 # Optimistic local update for HA UX
-                st["dry_flag"] = True
+                st["dry_flag"] = bool(want_on)
                 st["valve_open"] = True
                 state_cache[mac] = st
                 base = f"{TOPIC_PREFIX}/{mac}"
-                pub(f"{base}/settings/dry_flag", "on", retain=True)
+                pub(f"{base}/settings/dry_flag", "on" if want_on else "off", retain=True)
                 pub(f"{base}/state/valve_open", "1", retain=False)
             elif cmd[:1] == ["dry_flag"]:
                 pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
