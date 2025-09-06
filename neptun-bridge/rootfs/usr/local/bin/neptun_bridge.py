@@ -444,6 +444,7 @@ def ensure_discovery(mac):
             "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/step",
             "unit_of_measurement": "L/pulse",
             "icon": "mdi:counter",
+            "entity_category": "config",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{sidS}/config", confS, retain=True)
@@ -491,6 +492,7 @@ def ensure_discovery(mac):
         "unique_id": dt_id,
         "state_topic": f"{TOPIC_PREFIX}/{mac}/device_time",
         "device_class": "timestamp",
+        "entity_category": "diagnostic",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/sensor/{dt_id}/config", dt_conf, retain=True)
@@ -530,12 +532,13 @@ def ensure_discovery(mac):
             "unique_id": t_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/lines_in/line_{i}",
             "icon": "mdi:label",
+            "entity_category": "config",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{t_id}/config", t_conf, retain=True)
 
-    # Additional binary sensors matching Node-RED flow
     base_topic = f"{TOPIC_PREFIX}/{mac}"
+
     # Overall leak detected
     leak_id = f"neptun_{safe_mac}_leak_detected"
     leak_conf = {
@@ -544,8 +547,7 @@ def ensure_discovery(mac):
         "state_topic": f"{base_topic}/settings/status/alert",
         "payload_on": "on",
         "payload_off": "off",
-        "device_class": "problem",
-        "icon": "mdi:water-alert",
+        "device_class": "moisture",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{leak_id}/config", leak_conf, retain=True)
@@ -570,26 +572,25 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "problem",
-        "icon": "mdi:alert-circle",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_alert_id}/config", mod_alert_conf, retain=True)
 
-    # Valve Closed (inverse of valve_open)
-    valve_closed_id = f"neptun_{safe_mac}_valve_closed"
+    # Valve State
+    valve_closed_id = f"neptun_{safe_mac}_valve_open"
     valve_closed_conf = {
-        "name": f"Valve Closed",
+        "name": f"Valve Open",
         "unique_id": valve_closed_id,
         "state_topic": f"{base_topic}/state/valve_open",
-        "payload_on": "0",
-        "payload_off": "1",
-        "device_class": "problem",
-        "icon": "mdi:valve-closed",
+        "payload_on": "1",
+        "payload_off": "0",
+        "device_class": "opening",
+        "icon": "mdi:valve",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{valve_closed_id}/config", valve_closed_conf, retain=True)
 
-    # Module Battery Discharged
+    # Module Battery 
     mod_batt_id = f"neptun_{safe_mac}_module_battery"
     mod_batt_conf = {
         "name": f"Module Battery",
@@ -602,16 +603,15 @@ def ensure_discovery(mac):
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_batt_id}/config", mod_batt_conf, retain=True)
 
-    # Sensors Battery Discharged
-    sens_batt_id = f"neptun_{safe_mac}_sensors_battery_discharged"
+    # Sensors Battery 
+    sens_batt_id = f"neptun_{safe_mac}_sensors_battery"
     sens_batt_conf = {
-        "name": f"Sensors Battery Discharged",
+        "name": f"Sensors Battery",
         "unique_id": sens_batt_id,
         "state_topic": f"{base_topic}/settings/status/battery_discharge_in_sensor",
         "payload_on": "yes",
         "payload_off": "no",
-        "device_class": "problem",
-        "icon": "mdi:battery-off",
+        "device_class": "battery",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_batt_id}/config", sens_batt_conf, retain=True)
@@ -731,6 +731,7 @@ def publish_system(mac_from_topic, buf: bytes):
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/signal_level",
             "unit_of_measurement": "lqi",
             "icon": "mdi:signal",
+            "entity_category": "diagnostic",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf, retain=True)
