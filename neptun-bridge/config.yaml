@@ -1,7 +1,7 @@
 ﻿name: "Neptun ProW+WiFi Local Bridge (Home Assistant add-on)"
 version: "0.1.49"
 slug: neptun-bridge
-description: "Р›РѕРєР°Р»СЊРЅС‹Р№ Р±СЂРѕРєРµСЂ MQTT Рё РјРѕСЃС‚ РґР»СЏ Neptun"
+description: "Neptun ProW+WiFi Local Bridge (Home Assistant add-on)"
 url: "https://github.com/dima11235/ha-neptun-addon"
 arch:
   - amd64
