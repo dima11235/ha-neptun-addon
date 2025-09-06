@@ -279,6 +279,44 @@ def publish_raw(mac, buf: bytes):
         src = {"hex":hexstr,"base64":buf.hex(),"len":len(buf),"ts":ts,"type":th}[sfx]
         pub(f"{byN}/{sfx}", src, retain=True)
 
+# [BRIDGE DOC] Build 0x57 write-counters frame (TLV 0x43 with 4x [U32 BE value, U8 step]).
+def compose_counters_set_frame(lines_vals_steps):
+    """Compose a settings frame to write counters for lines 1..4.
+
+    lines_vals_steps: dict { index:int(1..4) -> (value_liters:int, step:int or None) }
+    For unspecified lines, use last known raw value/step if available, else zeros.
+    """
+    # Seed with last known raw from cache if available
+    lines = []  # list of tuples (val, step)
+    for i in range(1,5):
+        lines.append((0, 0))
+    # Try to fill from cache
+    try:
+        # We pass mac via closure by reading the most recent from state_cache within caller; here keep zeros.
+        pass
+    except Exception:
+        pass
+    # Caller will replace with proper defaults before calling this if needed.
+
+    # Override with provided updates
+    for idx, tup in lines_vals_steps.items():
+        if not (1 <= idx <= 4):
+            continue
+        val = int(max(0, int(tup[0])))
+        stp = int(tup[1]) if (len(tup) > 1 and tup[1] is not None) else 0
+        lines[idx-1] = (val, stp if 0 <= stp <= 255 else 0)
+
+    # Build TLV payload 0x43 of 20 bytes (4 lines * 5 bytes)
+    tlv = bytearray()
+    for (val, stp) in lines:
+        tlv += bytes([(val >> 24) & 0xFF, (val >> 16) & 0xFF, (val >> 8) & 0xFF, val & 0xFF, stp & 0xFF])
+
+    # Frame: 02 54 51 57 00 17 43 00 14 <tlv> CRC
+    body = bytearray([0x02,0x54,0x51,0x57, 0x00,0x17, 0x43,0x00,0x14])
+    body += tlv
+    crc = crc16_ccitt(body)
+    return bytes(body + struct.pack(">H", crc))
+
 # [BRIDGE DOC] Emit Home Assistant discovery for one device MAC (id-sanitized).
 def ensure_discovery(mac):
     """
@@ -630,10 +668,19 @@ def publish_system(mac_from_topic, buf: bytes):
     if sensors_status: parsedCfg["sensors_status"] = sensors_status
     pub(f"{base}/config/json", parsedCfg, retain=True)
 
+    # Cache last raw counters for potential write frames and publish
+    last_raw = []
     for idx, c in enumerate(st.get("counters", []), start=1):
         val = int(c.get("value",0)); step = int(c.get("step",1)) or 1
+        last_raw.append((val, step))
         pub(f"{base}/counters/line_{idx}/value", val, retain=False)
         pub(f"{base}/counters/line_{idx}/step", step, retain=False)
+    try:
+        prev_cache = state_cache.get(mac, {})
+        prev_cache["counters_last"] = last_raw
+        state_cache[mac] = prev_cache
+    except Exception:
+        pass
 
     # Publish wired lines leak status (on/off)
     wired = st.get("wired_states", [])
@@ -889,6 +936,69 @@ def on_message(c, userdata, msg):
                 state_cache[mac] = st
                 base = f"{TOPIC_PREFIX}/{mac}"
                 pub(f"{base}/settings/lines_in/line_{idx}", "counter" if want_counter else "sensor", retain=True)
+
+            elif len(cmd) >= 3 and cmd[0] == "counters" and cmd[1].startswith("line_"):
+                # Handle counters write commands:
+                # neptun/<mac>/cmd/counters/line_<i>/value/set  (payload=int liters)
+                # neptun/<mac>/cmd/counters/line_<i>/step/set   (payload=int L/pulse)
+                try:
+                    idx = int(cmd[1].split("_")[1])
+                except Exception:
+                    idx = None
+                if idx is None or not (1 <= idx <= 4):
+                    return
+                action = cmd[2]
+                payload = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
+
+                # Prepare defaults from last seen raw values to avoid zeroing other lines
+                last = state_cache.get(mac, {}).get("counters_last", [])
+                defaults = {}
+                for i in range(1,5):
+                    try:
+                        rv, rs = last[i-1]
+                    except Exception:
+                        rv, rs = 0, 0
+                    defaults[i] = (rv, rs)
+
+                updates = {}
+                if action == "value" and len(cmd) >= 4 and cmd[3] == "set":
+                    try:
+                        desired_l = int(float(payload))
+                    except Exception:
+                        return
+                    # Keep current step for the line if known
+                    cur_step = defaults.get(idx, (0,0))[1]
+                    updates[idx] = (desired_l, cur_step if cur_step else 0)
+                elif action == "step" and len(cmd) >= 4 and cmd[3] == "set":
+                    try:
+                        step = int(float(payload))
+                        if not (0 < step <= 255):
+                            return
+                    except Exception:
+                        return
+                    cur_val = defaults.get(idx, (0,0))[0]
+                    updates[idx] = (cur_val, step)
+                else:
+                    return
+
+                # Build full lines payload combining defaults and updates
+                lines = {}
+                for i in range(1,5):
+                    val, stp = defaults[i]
+                    if i in updates:
+                        uval, ustp = updates[i]
+                        val = uval
+                        if ustp:
+                            stp = ustp
+                    lines[i] = (val, stp)
+
+                frame = compose_counters_set_frame(lines)
+                pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
+                if not pref:
+                    log("No cloud prefix known for", mac, ", waiting for incoming frame to learn it")
+                    return
+                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
+                log(f"CMD counters line_{idx} {action} ->", mac, payload)
             
 
     except Exception as e:
