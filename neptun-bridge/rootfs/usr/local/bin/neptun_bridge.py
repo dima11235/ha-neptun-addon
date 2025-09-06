@@ -361,28 +361,7 @@ def ensure_discovery(mac):
     except Exception:
         pass
 
-    # Switch: Floor Wash mode (maps to dry_flag + valve open)
-    sw_wash_id = f"neptun_{safe_mac}_floor_wash"
-    sw_wash_conf = {
-        "name": f"Floor Wash",
-        "unique_id": sw_wash_id,
-        "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/floor_wash/set",
-        "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/dry_flag",
-        "payload_on": "on",
-        "payload_off": "off",
-        "icon": "mdi:mop",
-        "device": device,
-        "entity_category": "config"
-    }
-    pub(f"{DISCOVERY_PRE}/switch/{sw_wash_id}/config", sw_wash_conf, retain=True)
-    # Cleanup old button discovery for Floor Wash
-    try:
-        btn_wash_id = f"neptun_{safe_mac}_floor_wash"
-        btn_wash_off_id = f"neptun_{safe_mac}_floor_wash_off"
-        client.publish(f"{DISCOVERY_PRE}/button/{btn_wash_id}/config", b"", retain=True)
-        client.publish(f"{DISCOVERY_PRE}/button/{btn_wash_off_id}/config", b"", retain=True)
-    except Exception:
-        pass
+    # Floor Wash entities removed: use Dry Flag switch under Controls
 
     # Add MQTT switch for Dry Flag
     obj_id2 = f"neptun_{safe_mac}_dry_flag"
@@ -396,7 +375,6 @@ def ensure_discovery(mac):
         "qos": 0,
         "retain": False,
         "icon": "mdi:water-off",
-        "entity_category": "config",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/switch/{obj_id2}/config", conf2, retain=True)
@@ -917,31 +895,6 @@ def on_message(c, userdata, msg):
                 state_cache[mac] = st
                 base = f"{TOPIC_PREFIX}/{mac}"
                 pub(f"{base}/state/valve_open", "1" if want_open else "0", retain=False)
-            elif cmd[:1] == ["floor_wash"]:
-                # Enable/disable dry mode and keep valve open (per observed frames)
-                st = state_cache.get(mac, {})
-                pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
-                up = pl.upper()
-                want_on = up in ("1","ON","TRUE","YES","OPEN") or pl == "1"
-                frame = compose_settings_frame(
-                    open_valve=True,
-                    dry=want_on,
-                    close_on_offline=bool(st.get("flag_cl_valve", False)),
-                    line_cfg=int(st.get("line_in_cfg", 0))
-                )
-                pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
-                if not pref:
-                    log("No cloud prefix known for", mac, ", waiting for incoming frame to learn it")
-                    return
-                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
-                log("CMD floor_wash ->", mac, ("on" if want_on else "off"))
-                # Optimistic local update for HA UX
-                st["dry_flag"] = bool(want_on)
-                st["valve_open"] = True
-                state_cache[mac] = st
-                base = f"{TOPIC_PREFIX}/{mac}"
-                pub(f"{base}/settings/dry_flag", "on" if want_on else "off", retain=True)
-                pub(f"{base}/state/valve_open", "1", retain=False)
             elif cmd[:1] == ["dry_flag"]:
                 pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
                 up = pl.upper()
