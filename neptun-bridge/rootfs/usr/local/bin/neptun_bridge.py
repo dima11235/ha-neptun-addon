@@ -361,29 +361,28 @@ def ensure_discovery(mac):
     except Exception:
         pass
 
-    # Stateless button: Floor Wash (opens valve and enables dry mode)
-    btn_wash_id = f"neptun_{safe_mac}_floor_wash"
-    btn_wash_conf = {
+    # Switch: Floor Wash mode (maps to dry_flag + valve open)
+    sw_wash_id = f"neptun_{safe_mac}_floor_wash"
+    sw_wash_conf = {
         "name": f"Floor Wash",
-        "unique_id": btn_wash_id,
+        "unique_id": sw_wash_id,
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/floor_wash/set",
-        "payload_press": "1",
+        "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/dry_flag",
+        "payload_on": "on",
+        "payload_off": "off",
         "icon": "mdi:mop",
-        "device": device
+        "device": device,
+        "entity_category": "config"
     }
-    pub(f"{DISCOVERY_PRE}/button/{btn_wash_id}/config", btn_wash_conf, retain=True)
-
-    # Stateless button: Floor Wash Off (disable dry mode, keep valve open)
-    btn_wash_off_id = f"neptun_{safe_mac}_floor_wash_off"
-    btn_wash_off_conf = {
-        "name": f"Floor Wash Off",
-        "unique_id": btn_wash_off_id,
-        "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/floor_wash/set",
-        "payload_press": "0",
-        "icon": "mdi:mop-off",
-        "device": device
-    }
-    pub(f"{DISCOVERY_PRE}/button/{btn_wash_off_id}/config", btn_wash_off_conf, retain=True)
+    pub(f"{DISCOVERY_PRE}/switch/{sw_wash_id}/config", sw_wash_conf, retain=True)
+    # Cleanup old button discovery for Floor Wash
+    try:
+        btn_wash_id = f"neptun_{safe_mac}_floor_wash"
+        btn_wash_off_id = f"neptun_{safe_mac}_floor_wash_off"
+        client.publish(f"{DISCOVERY_PRE}/button/{btn_wash_id}/config", b"", retain=True)
+        client.publish(f"{DISCOVERY_PRE}/button/{btn_wash_off_id}/config", b"", retain=True)
+    except Exception:
+        pass
 
     # Add MQTT switch for Dry Flag
     obj_id2 = f"neptun_{safe_mac}_dry_flag"
@@ -491,6 +490,7 @@ def ensure_discovery(mac):
             "min": 1,
             "max": 255,
             "step": 1,
+            "mode": "box",
             "entity_category": "config",
             "device": device
         }
