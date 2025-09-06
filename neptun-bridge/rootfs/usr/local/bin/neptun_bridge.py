@@ -231,7 +231,8 @@ if MQTT_USER and MQTT_PASS:
 state_cache = {}  # per-MAC: keep last flags for command composing
 announced = set() # discovery announced MACs
 mac_to_prefix = {}
-last_seen = {}  # per-MAC last timestamp of incoming device frame
+last_seen = {}        # per-MAC last host timestamp of incoming device frame
+last_dev_epoch = {}   # per-MAC last device epoch seen in TLV 0x44
 
 def log(*a):
     if DEBUG: print("[BRIDGE]", *a, file=sys.stderr)
@@ -494,6 +495,19 @@ def ensure_discovery(mac):
     }
     pub(f"{DISCOVERY_PRE}/sensor/{dt_id}/config", dt_conf, retain=True)
 
+    # Device time drift sensor (seconds)
+    drift_id = f"neptun_{safe_mac}_device_time_drift"
+    drift_conf = {
+        "name": f"Device Time Drift",
+        "unique_id": drift_id,
+        "state_topic": f"{TOPIC_PREFIX}/{mac}/device_time_drift_seconds",
+        "unit_of_measurement": "s",
+        "icon": "mdi:clock-alert",
+        "entity_category": "diagnostic",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/sensor/{drift_id}/config", drift_conf, retain=True)
+
     # Wired leak sensors (lines 1..4)
     for i in range(1,5):
         wired_id = f"neptun_{safe_mac}_line_{i}_leak"
@@ -634,6 +648,12 @@ def publish_system(mac_from_topic, buf: bytes):
         last_seen[mac] = time.time()
     except Exception:
         pass
+    # Track device-provided time if present
+    try:
+        if "device_time_epoch" in st:
+            last_dev_epoch[mac] = int(st.get("device_time_epoch"))
+    except Exception:
+        pass
     
     prev = state_cache.get(mac, {})
     prev.update({
@@ -738,6 +758,11 @@ def publish_system(mac_from_topic, buf: bytes):
             iso = datetime.utcfromtimestamp(ts).strftime("%Y-%m-%dT%H:%M:%SZ")
             pub(f"{base}/device_time_epoch", ts, retain=True)
             pub(f"{base}/device_time", iso, retain=True)
+            try:
+                drift = int(time.time() - ts)
+                pub(f"{base}/device_time_drift_seconds", drift, retain=True)
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -1111,8 +1136,17 @@ def main():
                 macs = set(list(last_seen.keys()) + list(announced))
                 for mac in macs:
                     try:
-                        seen = last_seen.get(mac, 0)
-                        lost = (now - seen) > 60
+                        # Prefer device epoch if available and sane; fallback to host last_seen
+                        dev_ts = int(last_dev_epoch.get(mac, 0) or 0)
+                        lost = None
+                        if dev_ts > 0:
+                            # If device clock is wildly in the future (>5 min), ignore it
+                            if dev_ts - now > 300:
+                                lost = (now - last_seen.get(mac, 0)) > 60
+                            else:
+                                lost = (now - dev_ts) > 60
+                        else:
+                            lost = (now - last_seen.get(mac, 0)) > 60
                         base = f"{TOPIC_PREFIX}/{mac}"
                         pub(f"{base}/settings/status/module_lost", "yes" if lost else "no", retain=True)
                     except Exception:
