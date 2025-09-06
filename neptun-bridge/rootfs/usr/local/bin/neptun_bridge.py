@@ -18,7 +18,7 @@ Protocol notes:
 - Types: 0x52 system_state, 0x53 sensor_state, 0x43 counter_state, etc.
 """
 import os, sys, json, time, struct, threading
-from datetime import datetime
+from datetime import datetime, timezone
 import paho.mqtt.client as mqtt
 
 CLOUD_PREFIX   = os.getenv("NB_CLOUD_PREFIX", "")
@@ -782,7 +782,8 @@ def publish_system(mac_from_topic, buf: bytes):
     try:
         if "device_time_epoch" in st:
             ts = int(st["device_time_epoch"])
-            iso = datetime.utcfromtimestamp(ts).strftime("%Y-%m-%dT%H:%M:%SZ")
+            # Use timezone-aware UTC conversion (avoids deprecation warnings)
+            iso = datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             pub(f"{base}/device_time_epoch", ts, retain=True)
             pub(f"{base}/device_time", iso, retain=True)
             try:
