@@ -397,6 +397,7 @@ def ensure_discovery(mac):
         "qos": 0,
         "retain": False,
         "icon": "mdi:water-off",
+        "entity_category": "config",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/switch/{obj_id2}/config", conf2, retain=True)
@@ -413,6 +414,7 @@ def ensure_discovery(mac):
         "qos": 0,
         "retain": False,
         "icon": "mdi:lan-disconnect",
+        "entity_category": "config",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/switch/{obj_id3}/config", conf3, retain=True)
@@ -427,6 +429,7 @@ def ensure_discovery(mac):
             "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/lines_in/line_{i}",
             "options": ["sensor", "counter"],
             "icon": "mdi:tune",
+            "entity_category": "config",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/select/{sel_id}/config", sel_conf, retain=True)
@@ -471,6 +474,7 @@ def ensure_discovery(mac):
             "min": 0,
             "max": 1000000000,
             "step": 1,
+            "entity_category": "config",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/number/{numV_id}/config", numV_conf, retain=True)
@@ -487,6 +491,7 @@ def ensure_discovery(mac):
             "min": 1,
             "max": 255,
             "step": 1,
+            "entity_category": "config",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/number/{numS_id}/config", numS_conf, retain=True)
