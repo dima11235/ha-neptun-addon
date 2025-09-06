@@ -1,5 +1,5 @@
 {
-  "title": "Neptun Local Bridge (MQTT + парсер)",
+  "title": "Neptun ProW+WiFi Local Bridge (Home Assistant add-on)",
   "config": {
     "mqtt": "Настройки брокера MQTT",
     "mqtt.listen_port": "Порт прослушивания MQTT",
