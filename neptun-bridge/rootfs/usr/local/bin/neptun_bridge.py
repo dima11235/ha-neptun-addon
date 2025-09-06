@@ -641,7 +641,7 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "problem",
-        "icon": "mdi:router-off",
+        "icon": "mdi:cloud-off-outline",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_lost_id}/config", mod_lost_conf, retain=True)
