@@ -585,7 +585,7 @@ def ensure_discovery(mac):
         "payload_on": "0",
         "payload_off": "1",
         "device_class": "problem",
-        "icon": "mdi:valve",
+        "icon": "mdi:valve-closed",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{valve_closed_id}/config", valve_closed_conf, retain=True)
@@ -605,9 +605,9 @@ def ensure_discovery(mac):
     pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_batt_id}/config", mod_batt_conf, retain=True)
 
     # Sensors Battery Discharged
-    sens_batt_id = f"neptun_{safe_mac}_sensors_battery"
+    sens_batt_id = f"neptun_{safe_mac}_sensors_battery_discharged"
     sens_batt_conf = {
-        "name": f"Sensors Battery",
+        "name": f"Sensors Battery Discharged",
         "unique_id": sens_batt_id,
         "state_topic": f"{base_topic}/settings/status/battery_discharge_in_sensor",
         "payload_on": "yes",
