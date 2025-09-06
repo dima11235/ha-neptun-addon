@@ -198,6 +198,13 @@ def parse_system_state(buf: bytes) -> dict:
             out["counters"] = cs
         elif tag == 0x57: # module RSSI/level
             if len(v): out["W"] = v[0]
+        elif tag == 0x44: # device time as ASCII epoch seconds (observed)
+            try:
+                s = v.decode("ascii", "ignore").strip()
+                if s.isdigit():
+                    out["device_time_epoch"] = int(s)
+            except Exception:
+                pass
         else:
             pass
     return out
@@ -475,6 +482,17 @@ def ensure_discovery(mac):
         }
         pub(f"{DISCOVERY_PRE}/number/{numS_id}/config", numS_conf, retain=True)
 
+    # Device time (timestamp sensor)
+    dt_id = f"neptun_{safe_mac}_device_time"
+    dt_conf = {
+        "name": f"Device Time",
+        "unique_id": dt_id,
+        "state_topic": f"{TOPIC_PREFIX}/{mac}/device_time",
+        "device_class": "timestamp",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/sensor/{dt_id}/config", dt_conf, retain=True)
+
     # Wired leak sensors (lines 1..4)
     for i in range(1,5):
         wired_id = f"neptun_{safe_mac}_line_{i}_leak"
@@ -694,6 +712,15 @@ def publish_system(mac_from_topic, buf: bytes):
     
     if "device_id" in st: pub(f"{base}/device_id", st["device_id"], retain=True)
     if "W" in st: pub(f"{base}/signal_level", st["W"], retain=False)
+    # Device time (if provided): publish both epoch and ISO8601 UTC
+    try:
+        if "device_time_epoch" in st:
+            ts = int(st["device_time_epoch"])
+            iso = datetime.utcfromtimestamp(ts).strftime("%Y-%m-%dT%H:%M:%SZ")
+            pub(f"{base}/device_time_epoch", ts, retain=True)
+            pub(f"{base}/device_time", iso, retain=True)
+    except Exception:
+        pass
 
     pub(f"{base}/mac_address", mac, retain=True)
     
