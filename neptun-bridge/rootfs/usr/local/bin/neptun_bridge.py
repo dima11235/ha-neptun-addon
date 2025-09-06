@@ -108,6 +108,22 @@ def map_lines_in(mask: int):
         a.append("counter" if ((mask >> i) & 1) else "sensor")
     return {"line_1":a[0],"line_2":a[1],"line_3":a[2],"line_4":a[3]}
 
+# Battery normalization: unify representation across frame types (0x52 vs 0x53)
+# Some firmwares report battery as ~22..26 (%), others as 239..246 (likely 2.39..2.46 V x100).
+# We normalize to an integer percent in 0..100.
+def normalize_battery(v) -> int:
+    try:
+        x = int(v)
+    except Exception:
+        return 0
+    # Heuristic: values > 200 are interpreted as decivolts*10 (e.g., 239 -> 23.9)
+    if x > 200:
+        x = int(round(x / 10.0))
+    # Clamp to a sane range
+    if x < 0: x = 0
+    if x > 100: x = 100
+    return x
+
 # Unified builder for Home Assistant device descriptor
 def make_device(mac: str):
     """Return (device_dict, safe_mac, dev_id) for consistent HA discovery.
@@ -519,13 +535,14 @@ def publish_system(mac_from_topic, buf: bytes):
     
     sensors_status = []
     for s in st.get("wireless_sensors", []):
+        nb = normalize_battery(s.get("battery_percent", 0))
         sensors_status.append({
             "line": s["sensor_id"],
-            "battery": s["battery_percent"],
+            "battery": nb,
             "attention": 1 if s["leak"] else 0,
             "signal_level": s["signal_level"]
         })
-        pub(f"{base}/sensors_status/{s['sensor_id']}/battery", s["battery_percent"], retain=False)
+        pub(f"{base}/sensors_status/{s['sensor_id']}/battery", nb, retain=False)
         pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", s["signal_level"], retain=False)
         pub(f"{base}/sensors_status/{s['sensor_id']}/attention", 1 if s["leak"] else 0, retain=False)
              
@@ -654,8 +671,9 @@ def publish_sensor_state(mac_from_topic, buf: bytes):
     if sensors:
         slim = []
         for s in sensors:
-            slim.append({"line": s["sensor_id"], "battery": s["battery_percent"], "attention": 1 if s["leak"] else 0, "signal_level": s["signal_level"]})
-            pub(f"{base}/sensors_status/{s['sensor_id']}/battery", s["battery_percent"], retain=False)
+            nb = normalize_battery(s.get("battery_percent", 0))
+            slim.append({"line": s["sensor_id"], "battery": nb, "attention": 1 if s["leak"] else 0, "signal_level": s["signal_level"]})
+            pub(f"{base}/sensors_status/{s['sensor_id']}/battery", nb, retain=False)
             pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", s["signal_level"], retain=False)
             pub(f"{base}/sensors_status/{s['sensor_id']}/attention", 1 if s["leak"] else 0, retain=False)
         pub(f"{base}/sensors_status/json", slim, retain=False)
