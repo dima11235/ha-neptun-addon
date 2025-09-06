@@ -17,7 +17,7 @@ Protocol notes:
 - Frame signature: 0x02 0x54 ... type at byte[3], big-endian length at [4..5], CRC16-CCITT trailing 2 bytes.
 - Types: 0x52 system_state, 0x53 sensor_state, 0x43 counter_state, etc.
 """
-import os, sys, json, time, struct
+import os, sys, json, time, struct, threading
 from datetime import datetime
 import paho.mqtt.client as mqtt
 
@@ -231,6 +231,7 @@ if MQTT_USER and MQTT_PASS:
 state_cache = {}  # per-MAC: keep last flags for command composing
 announced = set() # discovery announced MACs
 mac_to_prefix = {}
+last_seen = {}  # per-MAC last timestamp of incoming device frame
 
 def log(*a):
     if DEBUG: print("[BRIDGE]", *a, file=sys.stderr)
@@ -592,6 +593,20 @@ def ensure_discovery(mac):
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_lost_id}/config", sens_lost_conf, retain=True)
 
+    # Module Lost (no data received > 60s), locally computed
+    mod_lost_id = f"neptun_{safe_mac}_module_lost"
+    mod_lost_conf = {
+        "name": f"Module Lost",
+        "unique_id": mod_lost_id,
+        "state_topic": f"{base_topic}/settings/status/module_lost",
+        "payload_on": "yes",
+        "payload_off": "no",
+        "device_class": "problem",
+        "icon": "mdi:router-off",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_lost_id}/config", mod_lost_conf, retain=True)
+
     announced.add(mac)
 
 # [BRIDGE DOC] Handle 0x52: update caches, publish states/settings/counters and discovery.
@@ -615,6 +630,10 @@ def publish_system(mac_from_topic, buf: bytes):
 
     publish_raw(mac, buf)
     ensure_discovery(mac)
+    try:
+        last_seen[mac] = time.time()
+    except Exception:
+        pass
     
     prev = state_cache.get(mac, {})
     prev.update({
@@ -780,6 +799,10 @@ def publish_sensor_state(mac_from_topic, buf: bytes):
     mac = mac_from_topic
     base = f"{TOPIC_PREFIX}/{mac}"
     publish_raw(mac, buf)
+    try:
+        last_seen[mac] = time.time()
+    except Exception:
+        pass
     if sensors:
         slim = []
         for s in sensors:
@@ -1080,6 +1103,25 @@ client.on_message = on_message
 
 # [BRIDGE DOC] MQTT connect loop with exponential backoff on errors.
 def main():
+    # Background watchdog to publish Module Lost state every 10s
+    def watchdog_loop():
+        while True:
+            try:
+                now = time.time()
+                macs = set(list(last_seen.keys()) + list(announced))
+                for mac in macs:
+                    try:
+                        seen = last_seen.get(mac, 0)
+                        lost = (now - seen) > 60
+                        base = f"{TOPIC_PREFIX}/{mac}"
+                        pub(f"{base}/settings/status/module_lost", "yes" if lost else "no", retain=True)
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+            time.sleep(10)
+
+    threading.Thread(target=watchdog_loop, name="neptun-watchdog", daemon=True).start()
     backoff = 1
     while True:
         try:
