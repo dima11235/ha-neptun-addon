@@ -295,6 +295,7 @@ def ensure_discovery(mac):
         "unique_id": btn_open_id,
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/valve/set",
         "payload_press": "1",
+        "icon": "mdi:water-pump",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/button/{btn_open_id}/config", btn_open_conf, retain=True)
@@ -305,6 +306,7 @@ def ensure_discovery(mac):
         "unique_id": btn_close_id,
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/valve/set",
         "payload_press": "0",
+        "icon": "mdi:water-pump-off",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/button/{btn_close_id}/config", btn_close_conf, retain=True)
@@ -320,6 +322,7 @@ def ensure_discovery(mac):
         "payload_off": "off",
         "qos": 0,
         "retain": False,
+        "icon": "mdi:water-off",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/switch/{obj_id2}/config", conf2, retain=True)
@@ -335,6 +338,7 @@ def ensure_discovery(mac):
         "payload_off": "open",
         "qos": 0,
         "retain": False,
+        "icon": "mdi:lan-disconnect",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/switch/{obj_id3}/config", conf3, retain=True)
@@ -348,6 +352,7 @@ def ensure_discovery(mac):
             "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/line_{i}_type/set",
             "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/lines_in/line_{i}",
             "options": ["sensor", "counter"],
+            "icon": "mdi:tune",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/select/{sel_id}/config", sel_conf, retain=True)
@@ -363,6 +368,7 @@ def ensure_discovery(mac):
             "unit_of_measurement": "m\u00B3",
             "state_class": "total",
             "value_template": "{{ value | float / 1000 }}",
+            "icon": "mdi:water",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{sidM}/config", confM, retain=True)
@@ -374,6 +380,7 @@ def ensure_discovery(mac):
             "unique_id": sidS,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/step",
             "unit_of_measurement": "L/pulse",
+            "icon": "mdi:counter",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{sidS}/config", confS, retain=True)
@@ -388,6 +395,7 @@ def ensure_discovery(mac):
             "payload_on": "on",
             "payload_off": "off",
             "device_class": "moisture",
+            "icon": "mdi:water-alert",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/binary_sensor/{wired_id}/config", wired_conf, retain=True)
@@ -399,6 +407,7 @@ def ensure_discovery(mac):
             "name": f"Line {i} Type",
             "unique_id": t_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/lines_in/line_{i}",
+            "icon": "mdi:label",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{t_id}/config", t_conf, retain=True)
@@ -414,6 +423,7 @@ def ensure_discovery(mac):
         "payload_on": "on",
         "payload_off": "off",
         "device_class": "problem",
+        "icon": "mdi:water-alert",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{leak_id}/config", leak_conf, retain=True)
@@ -427,6 +437,7 @@ def ensure_discovery(mac):
         "payload_on": "0",
         "payload_off": "1",
         "device_class": "problem",
+        "icon": "mdi:valve",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{valve_closed_id}/config", valve_closed_conf, retain=True)
@@ -440,6 +451,7 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "battery",
+        "icon": "mdi:battery-alert",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_batt_id}/config", mod_batt_conf, retain=True)
@@ -453,6 +465,7 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "problem",
+        "icon": "mdi:battery-alert",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_batt_id}/config", sens_batt_conf, retain=True)
@@ -466,6 +479,7 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "problem",
+        "icon": "mdi:lan-disconnect",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_lost_id}/config", sens_lost_conf, retain=True)
@@ -522,6 +536,7 @@ def publish_system(mac_from_topic, buf: bytes):
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attention",
             "payload_on": "1", "payload_off": "0",
             "device_class": "moisture",
+            "icon": "mdi:water-alert",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/binary_sensor/{obj_id}/config", conf, retain=True)
@@ -533,6 +548,7 @@ def publish_system(mac_from_topic, buf: bytes):
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/battery",
             "unit_of_measurement": "%",
             "device_class": "battery",
+            "icon": "mdi:battery",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf, retain=True)
@@ -543,6 +559,7 @@ def publish_system(mac_from_topic, buf: bytes):
             "unique_id": obj_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/signal_level",
             "unit_of_measurement": "lqi",
+            "icon": "mdi:signal",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf, retain=True)
