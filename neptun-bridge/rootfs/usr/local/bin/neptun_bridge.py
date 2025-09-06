@@ -518,7 +518,6 @@ def ensure_discovery(mac):
             "payload_on": "on",
             "payload_off": "off",
             "device_class": "moisture",
-            "icon": "mdi:leak",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/binary_sensor/{wired_id}/config", wired_conf, retain=True)
@@ -599,7 +598,6 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "battery",
-        "icon": "mdi:car-battery",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_batt_id}/config", mod_batt_conf, retain=True)
@@ -711,7 +709,6 @@ def publish_system(mac_from_topic, buf: bytes):
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attention",
             "payload_on": "1", "payload_off": "0",
             "device_class": "moisture",
-            "icon": "mdi:leak",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/binary_sensor/{obj_id}/config", conf, retain=True)
@@ -723,7 +720,6 @@ def publish_system(mac_from_topic, buf: bytes):
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/battery",
             "unit_of_measurement": "%",
             "device_class": "battery",
-            #"icon": "mdi:battery",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf, retain=True)
