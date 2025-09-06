@@ -782,12 +782,19 @@ def publish_system(mac_from_topic, buf: bytes):
     try:
         if "device_time_epoch" in st:
             ts = int(st["device_time_epoch"])
-            # Use timezone-aware UTC conversion (avoids deprecation warnings)
-            iso = datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            # Device time is reported in LOCAL time (epoch-like seconds for local clock).
+            # Convert to ISO UTC by subtracting local UTC offset, and compute drift vs local now.
+            try:
+                off = datetime.now().astimezone().utcoffset()
+                off_s = int(off.total_seconds()) if off else 0
+            except Exception:
+                off_s = 0
+            iso = datetime.fromtimestamp(ts - off_s, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             pub(f"{base}/device_time_epoch", ts, retain=True)
             pub(f"{base}/device_time", iso, retain=True)
             try:
-                drift = int(time.time() - ts)
+                # Drift relative to local wall clock
+                drift = int((time.time() + off_s) - ts)
                 pub(f"{base}/device_time_drift_seconds", drift, retain=True)
             except Exception:
                 pass
@@ -1168,11 +1175,18 @@ def main():
                         dev_ts = int(last_dev_epoch.get(mac, 0) or 0)
                         lost = None
                         if dev_ts > 0:
+                            # Compute local offset to align with device local time
+                            try:
+                                off = datetime.now().astimezone().utcoffset()
+                                off_s = int(off.total_seconds()) if off else 0
+                            except Exception:
+                                off_s = 0
+                            now_local = now + off_s
                             # If device clock is wildly in the future (>5 min), ignore it
-                            if dev_ts - now > 300:
+                            if dev_ts - now_local > 300:
                                 lost = (now - last_seen.get(mac, 0)) > 60
                             else:
-                                lost = (now - dev_ts) > 60
+                                lost = (now_local - dev_ts) > 60
                         else:
                             lost = (now - last_seen.get(mac, 0)) > 60
                         base = f"{TOPIC_PREFIX}/{mac}"
