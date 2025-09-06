@@ -363,10 +363,10 @@ def ensure_discovery(mac):
 
     # Floor Wash entities removed: use Dry Flag switch under Controls
 
-    # Add MQTT switch for Dry Flag
+    # Add MQTT switch for Floor Wash (dry mode control)
     obj_id2 = f"neptun_{safe_mac}_dry_flag"
     conf2 = {
-        "name": f"Dry Flag",
+        "name": f"Floor Wash",
         "unique_id": obj_id2,
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/dry_flag/set",
         "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/dry_flag",
@@ -374,7 +374,7 @@ def ensure_discovery(mac):
         "payload_off": "off",
         "qos": 0,
         "retain": False,
-        "icon": "mdi:water-off",
+        "icon": "mdi:mop",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/switch/{obj_id2}/config", conf2, retain=True)
