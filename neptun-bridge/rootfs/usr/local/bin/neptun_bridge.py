@@ -105,7 +105,7 @@ def decode_status_name(s: int) -> str:
 def map_lines_in(mask: int):
     a = []
     for i in range(4):
-        a.append("water_counter" if ((mask >> i) & 1) else "wired_sensor")
+        a.append("counter" if ((mask >> i) & 1) else "sensor")
     return {"line_1":a[0],"line_2":a[1],"line_3":a[2],"line_4":a[3]}
 
 # Unified builder for Home Assistant device descriptor
@@ -291,7 +291,7 @@ def ensure_discovery(mac):
     # Two stateless buttons for valve control
     btn_open_id = f"neptun_{safe_mac}_valve_open"
     btn_open_conf = {
-        "name": f"Neptun {safe_mac} Valve Open",
+        "name": f"Valve Open",
         "unique_id": btn_open_id,
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/valve/set",
         "payload_press": "1",
@@ -301,7 +301,7 @@ def ensure_discovery(mac):
 
     btn_close_id = f"neptun_{safe_mac}_valve_close"
     btn_close_conf = {
-        "name": f"Neptun {safe_mac} Valve Close",
+        "name": f"Valve Close",
         "unique_id": btn_close_id,
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/valve/set",
         "payload_press": "0",
@@ -312,7 +312,7 @@ def ensure_discovery(mac):
     # Add MQTT switch for Dry Flag
     obj_id2 = f"neptun_{safe_mac}_dry_flag"
     conf2 = {
-        "name": f"Neptun {safe_mac} Dry Flag",
+        "name": f"Dry Flag",
         "unique_id": obj_id2,
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/dry_flag/set",
         "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/dry_flag",
@@ -327,7 +327,7 @@ def ensure_discovery(mac):
     # Add MQTT switch for Close On Offline
     obj_id3 = f"neptun_{safe_mac}_close_on_offline"
     conf3 = {
-        "name": f"Neptun {safe_mac} Close On Sensors Offline",
+        "name": f"Close On Offline",
         "unique_id": obj_id3,
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/close_on_offline/set",
         "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/close_valve_flag",
@@ -343,7 +343,7 @@ def ensure_discovery(mac):
     for i in range(1,5):
         sel_id = f"neptun_{safe_mac}_line_{i}_type"
         sel_conf = {
-            "name": f"Neptun {safe_mac} Line {i} Type",
+            "name": f"Line {i} Type",
             "unique_id": sel_id,
             "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/line_{i}_type/set",
             "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/lines_in/line_{i}",
@@ -356,7 +356,7 @@ def ensure_discovery(mac):
         # Derived: cubic meters from liters via value_template
         sidM = f"neptun_{safe_mac}_line_{i}_counter"
         confM = {
-            "name": f"Neptun {safe_mac} Line {i} Counter",
+            "name": f"Line {i} Counter",
             "unique_id": sidM,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/value",
             "device_class": "water",
@@ -370,7 +370,7 @@ def ensure_discovery(mac):
         # Step in liters per pulse (L/pulse)
         sidS = f"neptun_{safe_mac}_line_{i}_step"
         confS = {
-            "name": f"Neptun {safe_mac} Line {i} Counter Step",
+            "name": f"Line {i} Counter Step",
             "unique_id": sidS,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/step",
             "unit_of_measurement": "L/pulse",
@@ -382,7 +382,7 @@ def ensure_discovery(mac):
     for i in range(1,5):
         wired_id = f"neptun_{safe_mac}_line_{i}_leak"
         wired_conf = {
-            "name": f"Neptun {safe_mac} Line {i} Leak",
+            "name": f"Line {i} Leak",
             "unique_id": wired_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/lines_status/line_{i}",
             "payload_on": "on",
@@ -396,7 +396,7 @@ def ensure_discovery(mac):
     for i in range(1,5):
         t_id = f"neptun_{safe_mac}_line_{i}_type"
         t_conf = {
-            "name": f"Neptun {safe_mac} Line {i} Type",
+            "name": f"Line {i} Type",
             "unique_id": t_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/lines_in/line_{i}",
             "device": device
@@ -408,7 +408,7 @@ def ensure_discovery(mac):
     # Overall leak detected
     leak_id = f"neptun_{safe_mac}_leak_detected"
     leak_conf = {
-        "name": f"Neptun {safe_mac} Leak Detected",
+        "name": f"Leak Detected",
         "unique_id": leak_id,
         "state_topic": f"{base_topic}/settings/status/alert",
         "payload_on": "on",
@@ -421,7 +421,7 @@ def ensure_discovery(mac):
     # Valve Closed (inverse of valve_open)
     valve_closed_id = f"neptun_{safe_mac}_valve_closed"
     valve_closed_conf = {
-        "name": f"Neptun {safe_mac} Valve Closed",
+        "name": f"Valve Closed",
         "unique_id": valve_closed_id,
         "state_topic": f"{base_topic}/state/valve_open",
         "payload_on": "0",
@@ -434,7 +434,7 @@ def ensure_discovery(mac):
     # Module Battery Discharged
     mod_batt_id = f"neptun_{safe_mac}_module_battery"
     mod_batt_conf = {
-        "name": f"Neptun {safe_mac} Module Battery",
+        "name": f"Module Battery",
         "unique_id": mod_batt_id,
         "state_topic": f"{base_topic}/settings/status/battery_discharge_in_module",
         "payload_on": "yes",
@@ -447,7 +447,7 @@ def ensure_discovery(mac):
     # Sensors Battery Discharged
     sens_batt_id = f"neptun_{safe_mac}_sensors_battery"
     sens_batt_conf = {
-        "name": f"Neptun {safe_mac} Sensors Battery",
+        "name": f"Sensors Battery",
         "unique_id": sens_batt_id,
         "state_topic": f"{base_topic}/settings/status/battery_discharge_in_sensor",
         "payload_on": "yes",
@@ -460,7 +460,7 @@ def ensure_discovery(mac):
     # Sensors Lost
     sens_lost_id = f"neptun_{safe_mac}_sensors_lost"
     sens_lost_conf = {
-        "name": f"Neptun {safe_mac} Sensors Lost",
+        "name": f"Sensors Lost",
         "unique_id": sens_lost_id,
         "state_topic": f"{base_topic}/settings/status/sensors_lost",
         "payload_on": "yes",
@@ -517,7 +517,7 @@ def publish_system(mac_from_topic, buf: bytes):
              
         obj_id = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_leak"
         conf = {
-            "name": f"Neptun {safe_mac} Sensor {s['sensor_id']} Leak",
+            "name": f"Sensor {s['sensor_id']} Leak",
             "unique_id": obj_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attention",
             "payload_on": "1", "payload_off": "0",
@@ -528,7 +528,7 @@ def publish_system(mac_from_topic, buf: bytes):
 
         obj_id = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_battery"
         conf = {
-            "name": f"Neptun {safe_mac} Sensor {s['sensor_id']} Battery",
+            "name": f"Sensor {s['sensor_id']} Battery",
             "unique_id": obj_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/battery",
             "unit_of_measurement": "%",
@@ -539,7 +539,7 @@ def publish_system(mac_from_topic, buf: bytes):
 
         obj_id = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_signal_level"
         conf = {
-            "name": f"Neptun {safe_mac} Sensor {s['sensor_id']} RSSI",
+            "name": f"Sensor {s['sensor_id']} RSSI",
             "unique_id": obj_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/signal_level",
             "unit_of_measurement": "lqi",
@@ -763,7 +763,7 @@ def on_message(c, userdata, msg):
                     except Exception:
                         pref = ""
                 if not pref:
-                    log("No cloud prefix known for", mac, "Waiting for incoming frame to learn it")
+                    log("No cloud prefix known for", mac, ", waiting for incoming frame to learn it")
                     return
                 c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log("CMD valve ->", mac, "open" if want_open else "close")
@@ -780,7 +780,7 @@ def on_message(c, userdata, msg):
                 )
                 pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
                 if not pref:
-                    log("No cloud prefix known for", mac, "РІР‚вЂќ waiting for incoming frame to learn it")
+                    log("No cloud prefix known for", mac, ", waiting for incoming frame to learn it")
                     return
                 c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log("CMD dry_flag ->", mac, "on" if want_on else "off")
