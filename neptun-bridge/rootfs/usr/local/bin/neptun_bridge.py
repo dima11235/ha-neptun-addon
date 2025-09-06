@@ -626,7 +626,8 @@ def ensure_discovery(mac):
         "state_topic": f"{base_topic}/settings/status/sensors_lost",
         "payload_on": "yes",
         "payload_off": "no",
-        "device_class": "connectivity",
+        "device_class": "problem",
+        "icon": "mdi:wifi",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_lost_id}/config", sens_lost_conf, retain=True)
