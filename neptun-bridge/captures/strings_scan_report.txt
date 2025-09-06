@@ -1,6 +1,0 @@
-File: capture-Bridge0-Sep  6 15-39-38.pcapng
-  strings_found: 378
-  keyword_hits: 1
-  sample_hits:
-   - aP+,UO
-
