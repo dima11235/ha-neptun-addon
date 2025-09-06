@@ -14,6 +14,12 @@ mkdir -p /data/mosquitto || true
 # Align ownership when mosquitto runs as service user (best-effort)
 chown -R mosquitto:mosquitto /data/mosquitto 2>/dev/null || true
 
+# Align container timezone to host if TZ is provided
+if [ -n "$TZ" ] && [ -f "/usr/share/zoneinfo/$TZ" ]; then
+  ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime || true
+  echo "$TZ" > /etc/timezone || true
+fi
+
 # HA MQTT bridge settings
 HA_HOST=$(jq -r '.ha_mqtt.host' "$OPTIONS")
 HA_PORT=$(jq -r '.ha_mqtt.port' "$OPTIONS")
