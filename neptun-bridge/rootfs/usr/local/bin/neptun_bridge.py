@@ -785,6 +785,14 @@ def on_message(c, userdata, msg):
                 c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log("CMD dry_flag ->", mac, "on" if want_on else "off")
 
+                # Optimistic local state update to avoid HA UI reverting
+                st["dry_flag"] = want_on
+                state_cache[mac] = st
+                base = f"{TOPIC_PREFIX}/{mac}"
+                pub(f"{base}/settings/dry_flag", "on" if want_on else "off", retain=True)
+                # Mirror also status/dry_flag for consistency
+                pub(f"{base}/settings/status/dry_flag", "yes" if want_on else "no", retain=True)
+
             elif cmd[:1] == ["close_on_offline"]:
                 pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
                 up = pl.upper()
@@ -802,6 +810,12 @@ def on_message(c, userdata, msg):
                     return
                 c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log("CMD close_on_offline ->", mac, "on" if want_on else "off")
+
+                # Optimistic local state update
+                st["flag_cl_valve"] = want_on
+                state_cache[mac] = st
+                base = f"{TOPIC_PREFIX}/{mac}"
+                pub(f"{base}/settings/close_valve_flag", "close" if want_on else "open", retain=True)
 
             elif len(cmd) >= 1 and cmd[0].startswith("line_") and cmd[0].endswith("_type"):
                 try:
@@ -832,6 +846,12 @@ def on_message(c, userdata, msg):
                     return
                 c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log(f"CMD line_{idx}_type ->", mac, "counter" if want_counter else "sensor")
+
+                # Optimistic local state update for select entity
+                st["line_in_cfg"] = new_cfg
+                state_cache[mac] = st
+                base = f"{TOPIC_PREFIX}/{mac}"
+                pub(f"{base}/settings/lines_in/line_{idx}", "counter" if want_counter else "sensor", retain=True)
             
 
     except Exception as e:
