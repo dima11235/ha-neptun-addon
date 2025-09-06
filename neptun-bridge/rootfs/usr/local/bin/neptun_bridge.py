@@ -723,7 +723,7 @@ def publish_system(mac_from_topic, buf: bytes):
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/battery",
             "unit_of_measurement": "%",
             "device_class": "battery",
-            "icon": "mdi:battery",
+            #"icon": "mdi:battery",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf, retain=True)
