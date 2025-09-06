@@ -1,4 +1,5 @@
-﻿## Neptun Local Bridge (дополнение для Home Assistant)
+﻿
+## Neptun Local Bridge (дополнение для Home Assistant)
 
 Локальный MQTT‑мост и парсер бинарных кадров Neptun AquaControl. Аддон работает рядом с Home Assistant: принимает кадры от устройства Neptun, проверяет целостность, раскладывает данные по понятным MQTT‑топикам и автоматически объявляет сущности в HA (MQTT Discovery). Команды из HA отправляются обратно на устройство через MQTT‑канал.
 
