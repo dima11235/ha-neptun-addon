@@ -858,11 +858,29 @@ def publish_system(mac_from_topic, buf: bytes):
     except Exception:
         pass
 
-    # Publish wired lines leak status (on/off)
+    # Publish wired-only lines leak status (on/off)
+    # Conditions to publish 'on' for line i:
+    #  - line i is configured as sensor (not counter) in line_in_cfg
+    #  - wired zone state for line i is active in TLV 0x4C
+    #  - no wireless sensor with id == i+1 reports leak in TLV 0x73
     wired = st.get("wired_states", [])
+    line_cfg = int(st.get("line_in_cfg", 0)) & 0x0F
+    wireless_leaks = set()
+    try:
+        for ws in st.get("wireless_sensors", []) or []:
+            try:
+                if ws.get("leak"):
+                    wireless_leaks.add(int(ws.get("sensor_id", 0)))
+            except Exception:
+                continue
+    except Exception:
+        pass
     if wired:
         for i in range(4):
-            stv = "on" if (i < len(wired) and wired[i]) else "off"
+            is_sensor_line = ((line_cfg >> i) & 1) == 0
+            wired_active = (i < len(wired) and bool(wired[i]))
+            wireless_same_zone = ((i+1) in wireless_leaks)
+            stv = "on" if (is_sensor_line and wired_active and not wireless_same_zone) else "off"
             pub(f"{base}/lines_status/line_{i+1}", stv, retain=False)
 
     # Do not publish duplicate line input types under base/lines_in/*.
