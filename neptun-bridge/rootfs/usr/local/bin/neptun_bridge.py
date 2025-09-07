@@ -630,8 +630,8 @@ def ensure_discovery(mac):
         "name": f"Sensors Lost",
         "unique_id": sens_lost_id,
         "state_topic": f"{base_topic}/settings/status/sensors_lost",
-        "payload_on": "yes",
-        "payload_off": "no",
+        "payload_on": "no",
+        "payload_off": "yes",
         "device_class": "connectivity",
         "device": device
     }
@@ -643,8 +643,8 @@ def ensure_discovery(mac):
         "name": f"Module Lost",
         "unique_id": mod_lost_id,
         "state_topic": f"{base_topic}/settings/status/module_lost",
-        "payload_on": "yes",
-        "payload_off": "no",
+        "payload_on": "no",
+        "payload_off": "yes",
         "device_class": "connectivity",
         "device": device
     }
