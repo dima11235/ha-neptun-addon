@@ -12,6 +12,7 @@ Environment variables:
 - NB_CLOUD_PREFIX: upstream prefix for sending commands back.
 - NB_MQTT_USER/NB_MQTT_PASS: optional broker auth.
 - NB_RETAIN/NB_DEBUG: behavior toggles.
+- NB_WATCHDOG_PERIOD: watchdog check period in seconds (default: 30).
 
 Protocol notes:
 - Frame signature: 0x02 0x54 ... type at byte[3], big-endian length at [4..5], CRC16-CCITT trailing 2 bytes.
@@ -26,7 +27,10 @@ TOPIC_PREFIX   = os.getenv("NB_TOPIC_PREFIX", "neptun")
 DISCOVERY_PRE  = os.getenv("NB_DISCOVERY_PREFIX", "homeassistant")
 RETAIN_DEFAULT = os.getenv("NB_RETAIN", "true").lower() == "true"
 DEBUG          = os.getenv("NB_DEBUG", "false").lower() == "true"
-MODULE_LOST_DEFAULT = int(os.getenv("NB_MODULE_LOST_TIMEOUT", "60"))
+MODULE_LOST_DEFAULT = int(os.getenv("NB_MODULE_LOST_TIMEOUT", "300"))
+WATCHDOG_PERIOD = int(os.getenv("NB_WATCHDOG_PERIOD", "30"))
+if WATCHDOG_PERIOD < 5:
+    WATCHDOG_PERIOD = 5
 
 MQTT_HOST = "127.0.0.1"
 # Prefer NB_MQTT_PORT (from options), fallback to MQTT_LISTEN_PORT
@@ -505,7 +509,7 @@ def ensure_discovery(mac):
     drift_conf = {
         "name": f"Frame Interval",
         "unique_id": drift_id,
-        "state_topic": f"{TOPIC_PREFIX}/{mac}/device_time_drift_seconds",
+        "state_topic": f"{TOPIC_PREFIX}/{mac}/frame_interval_seconds",
         "unit_of_measurement": "s",
         "icon": "mdi:timer-outline",
         "entity_category": "diagnostic",
@@ -995,7 +999,7 @@ def on_message(c, userdata, msg):
                 prev_ts = float(last_seen.get(mac, 0) or 0)
                 gap = int(now_ts - prev_ts) if prev_ts > 0 else 0
                 base = f"{TOPIC_PREFIX}/{mac}"
-                pub(f"{base}/device_time_drift_seconds", gap, retain=True)
+                pub(f"{base}/frame_interval_seconds", gap, retain=True)
                 last_seen[mac] = now_ts
             except Exception:
                 pass
@@ -1256,7 +1260,7 @@ def main():
                         continue
             except Exception:
                 pass
-            time.sleep(10)
+            time.sleep(WATCHDOG_PERIOD)
 
     threading.Thread(target=watchdog_loop, name="neptun-watchdog", daemon=True).start()
     backoff = 1
