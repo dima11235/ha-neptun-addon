@@ -26,6 +26,7 @@ TOPIC_PREFIX   = os.getenv("NB_TOPIC_PREFIX", "neptun")
 DISCOVERY_PRE  = os.getenv("NB_DISCOVERY_PREFIX", "homeassistant")
 RETAIN_DEFAULT = os.getenv("NB_RETAIN", "true").lower() == "true"
 DEBUG          = os.getenv("NB_DEBUG", "false").lower() == "true"
+MODULE_LOST_DEFAULT = int(os.getenv("NB_MODULE_LOST_TIMEOUT", "60"))
 
 MQTT_HOST = "127.0.0.1"
 # Prefer NB_MQTT_PORT (from options), fallback to MQTT_LISTEN_PORT
@@ -233,6 +234,7 @@ announced = set() # discovery announced MACs
 mac_to_prefix = {}
 last_seen = {}        # per-MAC last host timestamp of incoming device frame
 last_dev_epoch = {}   # per-MAC last device epoch seen in TLV 0x44
+module_lost_timeout = {}  # per-MAC timeout seconds for module_lost (fallback MODULE_LOST_DEFAULT)
 
 def log(*a):
     if DEBUG: print("[BRIDGE]", *a, file=sys.stderr)
@@ -493,19 +495,21 @@ def ensure_discovery(mac):
         "state_topic": f"{TOPIC_PREFIX}/{mac}/device_time",
         "device_class": "timestamp",
         "entity_category": "diagnostic",
+        "entity_registry_enabled_default": False,
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/sensor/{dt_id}/config", dt_conf, retain=True)
 
-    # Device time drift sensor (seconds)
+    # Frame interval sensor (seconds)
     drift_id = f"neptun_{safe_mac}_device_time_drift"
     drift_conf = {
-        "name": f"Device Time Drift",
+        "name": f"Frame Interval",
         "unique_id": drift_id,
         "state_topic": f"{TOPIC_PREFIX}/{mac}/device_time_drift_seconds",
         "unit_of_measurement": "s",
-        "icon": "mdi:clock-alert",
+        "icon": "mdi:timer-outline",
         "entity_category": "diagnostic",
+        "entity_registry_enabled_default": False,
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/sensor/{drift_id}/config", drift_conf, retain=True)
@@ -630,7 +634,7 @@ def ensure_discovery(mac):
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_lost_id}/config", sens_lost_conf, retain=True)
 
-    # Module Lost (no data received > 120s), locally computed
+    # Module Lost (no data received > timeout), locally computed
     mod_lost_id = f"neptun_{safe_mac}_module_lost"
     mod_lost_conf = {
         "name": f"Module Lost",
@@ -643,6 +647,31 @@ def ensure_discovery(mac):
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_lost_id}/config", mod_lost_conf, retain=True)
+
+    # Number entity to configure Module Lost timeout (seconds)
+    mlt_id = f"neptun_{safe_mac}_module_lost_timeout"
+    mlt_conf = {
+        "name": f"Module Lost Timeout",
+        "unique_id": mlt_id,
+        "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/module_lost_timeout/set",
+        "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/module_lost_timeout",
+        "unit_of_measurement": "s",
+        "icon": "mdi:timer-cog-outline",
+        "min": 10,
+        "max": 3600,
+        "step": 1,
+        "mode": "box",
+        "entity_category": "config",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/number/{mlt_id}/config", mlt_conf, retain=True)
+
+    # Publish current timeout value
+    try:
+        cur_to = int(module_lost_timeout.get(mac, MODULE_LOST_DEFAULT))
+    except Exception:
+        cur_to = MODULE_LOST_DEFAULT
+    pub(f"{TOPIC_PREFIX}/{mac}/settings/module_lost_timeout", cur_to, retain=True)
 
     announced.add(mac)
 
@@ -780,7 +809,7 @@ def publish_system(mac_from_topic, buf: bytes):
         if "device_time_epoch" in st:
             ts = int(st["device_time_epoch"])
             # Device time is reported in LOCAL time (epoch-like seconds for local clock).
-            # Convert to ISO UTC by subtracting local UTC offset, and compute drift vs local now.
+            # Convert to ISO UTC by subtracting local UTC offset.
             try:
                 off = datetime.now().astimezone().utcoffset()
                 off_s = int(off.total_seconds()) if off else 0
@@ -789,14 +818,15 @@ def publish_system(mac_from_topic, buf: bytes):
             iso = datetime.fromtimestamp(ts - off_s, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             pub(f"{base}/device_time_epoch", ts, retain=True)
             pub(f"{base}/device_time", iso, retain=True)
-            try:
-                # Drift relative to local wall clock
-                drift = int((time.time() + off_s) - ts)
-                pub(f"{base}/device_time_drift_seconds", drift, retain=True)
-            except Exception:
-                pass
     except Exception:
         pass
+
+    # Publish current Module Lost timeout setting (retained)
+    try:
+        cur_to = int(module_lost_timeout.get(mac, MODULE_LOST_DEFAULT))
+    except Exception:
+        cur_to = MODULE_LOST_DEFAULT
+    pub(f"{base}/settings/module_lost_timeout", cur_to, retain=True)
 
     pub(f"{base}/mac_address", mac, retain=True)
     
@@ -911,6 +941,8 @@ def on_connect(c, userdata, flags, rc):
             c.subscribe("#", qos=0)
     
     c.subscribe(f"{TOPIC_PREFIX}/+/cmd/#", qos=0)
+    # Subscribe to retained settings to restore on restart
+    c.subscribe(f"{TOPIC_PREFIX}/+/settings/module_lost_timeout", qos=0)
     try:
         print(
             "[BRIDGE] subscribed:",
@@ -957,6 +989,16 @@ def on_message(c, userdata, msg):
             if not frame_ok(buf):
                 log("Bad frame", t, buf.hex())
                 return
+            # On any valid device frame: compute inter-frame gap and update last_seen
+            try:
+                now_ts = time.time()
+                prev_ts = float(last_seen.get(mac, 0) or 0)
+                gap = int(now_ts - prev_ts) if prev_ts > 0 else 0
+                base = f"{TOPIC_PREFIX}/{mac}"
+                pub(f"{base}/device_time_drift_seconds", gap, retain=True)
+                last_seen[mac] = now_ts
+            except Exception:
+                pass
             typ = buf[3]
             if typ == 0x52:
                 publish_system(mac, buf)
@@ -1088,6 +1130,20 @@ def on_message(c, userdata, msg):
                 base = f"{TOPIC_PREFIX}/{mac}"
                 pub(f"{base}/settings/lines_in/line_{idx}", "counter" if want_counter else "sensor", retain=True)
 
+            elif cmd[:1] == ["module_lost_timeout"]:
+                # Set per-device Module Lost timeout in seconds via MQTT Number
+                pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
+                try:
+                    val = int(float(pl))
+                except Exception:
+                    return
+                if val < 10: val = 10
+                if val > 3600: val = 3600
+                module_lost_timeout[mac] = val
+                base = f"{TOPIC_PREFIX}/{mac}"
+                pub(f"{base}/settings/module_lost_timeout", val, retain=True)
+                log("CMD module_lost_timeout ->", mac, val)
+
             elif len(cmd) >= 3 and cmd[0] == "counters" and cmd[1].startswith("line_"):
                 # Handle counters write commands:
                 # neptun/<mac>/cmd/counters/line_<i>/value/set  (payload=int liters)
@@ -1154,6 +1210,24 @@ def on_message(c, userdata, msg):
 
     except Exception as e:
         log("on_message error:", e)
+    
+    # Restore retained settings (non-cmd topics)
+    try:
+        t = msg.topic
+        if t.startswith(f"{TOPIC_PREFIX}/") and "/settings/" in t and t.endswith("/module_lost_timeout"):
+            mac = t.split("/")[1]
+            pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
+            try:
+                val = int(float(pl))
+            except Exception:
+                return
+            if val < 10: val = 10
+            if val > 3600: val = 3600
+            module_lost_timeout[mac] = val
+            if DEBUG:
+                log("RESTORE module_lost_timeout <-", mac, val)
+    except Exception:
+        pass
 
 client.on_connect = on_connect
 client.on_message = on_message
@@ -1168,24 +1242,14 @@ def main():
                 macs = set(list(last_seen.keys()) + list(announced))
                 for mac in macs:
                     try:
-                        # Prefer device epoch if available and sane; fallback to host last_seen
-                        dev_ts = int(last_dev_epoch.get(mac, 0) or 0)
-                        lost = None
-                        if dev_ts > 0:
-                            # Compute local offset to align with device local time
-                            try:
-                                off = datetime.now().astimezone().utcoffset()
-                                off_s = int(off.total_seconds()) if off else 0
-                            except Exception:
-                                off_s = 0
-                            now_local = now + off_s
-                            # If device clock is wildly in the future (>5 min), ignore it
-                            if dev_ts - now_local > 300:
-                                lost = (now - last_seen.get(mac, 0)) > 120
-                            else:
-                                lost = (now_local - dev_ts) > 120
-                        else:
-                            lost = (now - last_seen.get(mac, 0)) > 120
+                        # Determine module_lost purely by host-observed gap between frames
+                        # Ignore device-reported time to avoid false positives from clock drift
+                        last = float(last_seen.get(mac, 0) or 0)
+                        try:
+                            timeout = int(module_lost_timeout.get(mac, MODULE_LOST_DEFAULT))
+                        except Exception:
+                            timeout = MODULE_LOST_DEFAULT
+                        lost = (now - last) > timeout
                         base = f"{TOPIC_PREFIX}/{mac}"
                         pub(f"{base}/settings/status/module_lost", "yes" if lost else "no", retain=True)
                     except Exception:
