@@ -505,7 +505,7 @@ def ensure_discovery(mac):
     pub(f"{DISCOVERY_PRE}/sensor/{dt_id}/config", dt_conf, retain=True)
 
     # Frame interval sensor (seconds)
-    drift_id = f"neptun_{safe_mac}_device_time_drift"
+    drift_id = f"neptun_{safe_mac}_frame_interval"
     drift_conf = {
         "name": f"Frame Interval",
         "unique_id": drift_id,
