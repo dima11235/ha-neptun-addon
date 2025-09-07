@@ -437,7 +437,7 @@ def ensure_discovery(mac):
             "unit_of_measurement": "m\u00B3",
             "state_class": "total",
             "value_template": "{{ value | float / 1000 }}",
-            "icon": "mdi:water",
+            "icon": "mdi:counter",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{sidM}/config", confM, retain=True)
@@ -463,7 +463,7 @@ def ensure_discovery(mac):
             "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/counters/line_{i}/value/set",
             "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/value",
             "unit_of_measurement": "L",
-            "icon": "mdi:water",
+            "icon": "mdi:counter",
             "min": 0,
             "max": 1000000000,
             "step": 1,
@@ -625,9 +625,9 @@ def ensure_discovery(mac):
     pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_batt_id}/config", sens_batt_conf, retain=True)
 
     # Sensors Lost
-    sens_lost_id = f"neptun_{safe_mac}_sensors_lost"
+    sens_lost_id = f"neptun_{safe_mac}_sensors_online"
     sens_lost_conf = {
-        "name": f"Sensors Lost",
+        "name": f"Sensors Online",
         "unique_id": sens_lost_id,
         "state_topic": f"{base_topic}/settings/status/sensors_lost",
         "payload_on": "no",
@@ -638,9 +638,9 @@ def ensure_discovery(mac):
     pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_lost_id}/config", sens_lost_conf, retain=True)
 
     # Module Lost (no data received > timeout), locally computed
-    mod_lost_id = f"neptun_{safe_mac}_module_lost"
+    mod_lost_id = f"neptun_{safe_mac}_module_online"
     mod_lost_conf = {
-        "name": f"Module Lost",
+        "name": f"Module Online",
         "unique_id": mod_lost_id,
         "state_topic": f"{base_topic}/settings/status/module_lost",
         "payload_on": "no",
