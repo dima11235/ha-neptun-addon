@@ -332,12 +332,12 @@ def compose_counters_set_frame(lines_vals_steps):
     crc = crc16_ccitt(body)
     return bytes(body + struct.pack(">H", crc))
 
-# [BRIDGE DOC] Build 0x57 set-time frame (TLV 0x44 with ASCII epoch seconds).
+# [BRIDGE DOC] Build 0x57 set-time frame (TLV 0x44 with ASCII local datetime "DD/MM/YYYY,HH:MM:SS").
 def compose_time_set_frame(epoch_seconds: int):
     """Compose a settings frame to set device time.
 
-    Payload format observed in 0x52 frames uses TLV 0x44 carrying ASCII epoch
-    seconds. We mirror that for write via 0x57 with a single TLV 0x44.
+    Format per observed write frame: TLV 0x44 carrying ASCII local datetime
+    string "DD/MM/YYYY,HH:MM:SS" (e.g. 08/09/2025,23:31:18).
 
     Returns bytes ready to publish to <cloud_prefix>/<MAC>/to.
     """
@@ -346,7 +346,14 @@ def compose_time_set_frame(epoch_seconds: int):
             epoch_seconds = 0
     except Exception:
         epoch_seconds = 0
-    b = str(int(epoch_seconds)).encode("ascii", errors="ignore")
+    try:
+        lt = time.localtime(int(epoch_seconds))
+        s = f"{lt.tm_mday:02d}/{lt.tm_mon:02d}/{lt.tm_year:04d},{lt.tm_hour:02d}:{lt.tm_min:02d}:{lt.tm_sec:02d}"
+    except Exception:
+        # Fallback to current local time if formatting fails
+        lt = time.localtime()
+        s = f"{lt.tm_mday:02d}/{lt.tm_mon:02d}/{lt.tm_year:04d},{lt.tm_hour:02d}:{lt.tm_min:02d}:{lt.tm_sec:02d}"
+    b = s.encode("ascii", errors="ignore")
     L = 3 + len(b)
     body = bytearray([0x02,0x54,0x51,0x57, (L >> 8) & 0xFF, L & 0xFF, 0x44, (len(b) >> 8) & 0xFF, len(b) & 0xFF])
     body += b
@@ -1144,7 +1151,7 @@ def on_message(c, userdata, msg):
                 )
                 pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
                 if not pref:
-                    log("No cloud prefix known for", mac, "РІР‚вЂќ waiting for incoming frame to learn it")
+                    log("No cloud prefix known for", mac, "‚ waiting for incoming frame to learn it")
                     return
                 c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log("CMD close_on_offline ->", mac, "on" if want_on else "off")
@@ -1211,7 +1218,7 @@ def on_message(c, userdata, msg):
                 )
                 pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
                 if not pref:
-                    log("No cloud prefix known for", mac, "РІР‚вЂќ waiting for incoming frame to learn it")
+                    log("No cloud prefix known for", mac, "‚ waiting for incoming frame to learn it")
                     return
                 c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log(f"CMD line_{idx}_type ->", mac, "counter" if want_counter else "sensor")
