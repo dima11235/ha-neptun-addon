@@ -1191,9 +1191,9 @@ def on_message(c, userdata, msg):
                 if not pref:
                     log("No cloud prefix known for", mac, ", waiting for incoming frame to learn it")
                     return
-                # Do not retain time-set commands to avoid stale resets on reconnect
-                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=False)
-                log("CMD time set ->", mac, epoch)
+                # Retain time-set so device receives it even if reconnects; device clears topic after processing
+                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
+                log("CMD time set (retained) ->", mac, epoch)
 
             elif len(cmd) >= 1 and cmd[0].startswith("line_") and cmd[0].endswith("_type"):
                 try:
