@@ -139,3 +139,4 @@ mqtt_server: mqtt://core-mosquitto:1883
 - 0.1.36–0.1.39 — switch `Valve`, Floor Wash (бывш. Dry Flag), number (mode=box) для счётчика/шага, типы линий (select).
 
 - 0.1.62 - Add Set Device Time button (HA) and support for neptun/<MAC>/cmd/time/set; treat naive datetimes as local time.
+ - 0.1.63 - Fix device_time publishing and avoid retained time-set command; extrapolate when TLV 0x44 is absent.

@@ -732,14 +732,30 @@ def publish_system(mac_from_topic, buf: bytes):
 
     publish_raw(mac, buf)
     ensure_discovery(mac)
+    # Compute inter-frame gap locally for drift/extrapolation
     try:
-        last_seen[mac] = time.time()
+        now_ts = time.time()
+        prev_ts = float(last_seen.get(mac, 0) or 0)
+        gap = int(now_ts - prev_ts) if prev_ts > 0 else 0
+        last_seen[mac] = now_ts
     except Exception:
-        pass
+        gap = 0
     # Track device-provided time if present
+    # Track/publish device time: if absent in this frame, extrapolate by gap
     try:
+        dev_epoch = None
         if "device_time_epoch" in st:
-            last_dev_epoch[mac] = int(st.get("device_time_epoch"))
+            dev_epoch = int(st.get("device_time_epoch"))
+        elif mac in last_dev_epoch:
+            dev_epoch = int(last_dev_epoch.get(mac, 0)) + int(gap)
+        if dev_epoch is not None and dev_epoch > 0:
+            last_dev_epoch[mac] = dev_epoch
+            # Convert to local time ISO8601 (device returns local time semantics)
+            try:
+                dt_iso = datetime.fromtimestamp(dev_epoch).astimezone().isoformat()
+            except Exception:
+                dt_iso = str(dev_epoch)
+            pub(f"{base}/device_time", dt_iso, retain=True)
     except Exception:
         pass
     
@@ -1175,8 +1191,16 @@ def on_message(c, userdata, msg):
                 if not pref:
                     log("No cloud prefix known for", mac, ", waiting for incoming frame to learn it")
                     return
-                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
+                # Do not retain time-set commands to avoid stale resets on reconnect
+                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=False)
                 log("CMD time set ->", mac, epoch)
+                # Optimistic update of device_time state topic for HA UX
+                try:
+                    dt_iso = datetime.fromtimestamp(epoch).astimezone().isoformat()
+                    base = f"{TOPIC_PREFIX}/{mac}"
+                    pub(f"{base}/device_time", dt_iso, retain=True)
+                except Exception:
+                    pass
 
             elif len(cmd) >= 1 and cmd[0].startswith("line_") and cmd[0].endswith("_type"):
                 try:
