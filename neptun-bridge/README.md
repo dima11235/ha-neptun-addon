@@ -137,3 +137,5 @@ mqtt_server: mqtt://core-mosquitto:1883
 - 0.1.44 — `Module Status` (текст) и `Module Alert` (binary).
 - 0.1.41–0.1.43 — `Module Lost`, `Device Time Drift`, улучшения диагностики.
 - 0.1.36–0.1.39 — switch `Valve`, Floor Wash (бывш. Dry Flag), number (mode=box) для счётчика/шага, типы линий (select).
+
+- 0.1.62 - Add Set Device Time button (HA) and support for neptun/<MAC>/cmd/time/set; treat naive datetimes as local time.

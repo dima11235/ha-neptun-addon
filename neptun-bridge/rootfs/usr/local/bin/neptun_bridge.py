@@ -332,6 +332,27 @@ def compose_counters_set_frame(lines_vals_steps):
     crc = crc16_ccitt(body)
     return bytes(body + struct.pack(">H", crc))
 
+# [BRIDGE DOC] Build 0x57 set-time frame (TLV 0x44 with ASCII epoch seconds).
+def compose_time_set_frame(epoch_seconds: int):
+    """Compose a settings frame to set device time.
+
+    Payload format observed in 0x52 frames uses TLV 0x44 carrying ASCII epoch
+    seconds. We mirror that for write via 0x57 with a single TLV 0x44.
+
+    Returns bytes ready to publish to <cloud_prefix>/<MAC>/to.
+    """
+    try:
+        if epoch_seconds < 0:
+            epoch_seconds = 0
+    except Exception:
+        epoch_seconds = 0
+    b = str(int(epoch_seconds)).encode("ascii", errors="ignore")
+    L = 3 + len(b)
+    body = bytearray([0x02,0x54,0x51,0x57, (L >> 8) & 0xFF, L & 0xFF, 0x44, (len(b) >> 8) & 0xFF, len(b) & 0xFF])
+    body += b
+    crc = crc16_ccitt(body)
+    return bytes(body + struct.pack(">H", crc))
+
 # [BRIDGE DOC] Emit Home Assistant discovery for one device MAC (id-sanitized).
 def ensure_discovery(mac):
     """
@@ -517,6 +538,19 @@ def ensure_discovery(mac):
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/sensor/{drift_id}/config", drift_conf, retain=True)
+
+    # Button to set device time to current host time
+    btn_id = f"neptun_{safe_mac}_set_time_now"
+    btn_conf = {
+        "name": f"Set Device Time",
+        "unique_id": btn_id,
+        "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/time/set",
+        "payload_press": "now",
+        "icon": "mdi:clock-check",
+        "entity_category": "config",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/button/{btn_id}/config", btn_conf, retain=True)
 
     # Wired leak sensors (lines 1..4)
     for i in range(1,5):
@@ -1113,6 +1147,36 @@ def on_message(c, userdata, msg):
                 state_cache[mac] = st
                 base = f"{TOPIC_PREFIX}/{mac}"
                 pub(f"{base}/settings/close_valve_flag", "close" if want_on else "open", retain=True)
+
+            elif cmd[:2] == ["time", "set"]:
+                # Accepts either numeric epoch seconds, ISO string, or 'now'
+                pl_raw = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
+                epoch = None
+                if not pl_raw or pl_raw.lower() == "now" or pl_raw.lower() == "press":
+                    epoch = int(time.time())
+                else:
+                    try:
+                        # Try integer epoch first
+                        epoch = int(float(pl_raw))
+                    except Exception:
+                        # Try ISO 8601 (python 3.11 fromisoformat handles many forms)
+                        try:
+                            dt = datetime.fromisoformat(pl_raw)
+                            if dt.tzinfo is None:
+                                # Treat naive as LOCAL time (Neptun reports local time)
+                                epoch = int(time.mktime(dt.timetuple()))
+                            else:
+                                epoch = int(dt.timestamp())
+                        except Exception:
+                            epoch = int(time.time())
+
+                frame = compose_time_set_frame(epoch)
+                pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
+                if not pref:
+                    log("No cloud prefix known for", mac, ", waiting for incoming frame to learn it")
+                    return
+                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
+                log("CMD time set ->", mac, epoch)
 
             elif len(cmd) >= 1 and cmd[0].startswith("line_") and cmd[0].endswith("_type"):
                 try:
