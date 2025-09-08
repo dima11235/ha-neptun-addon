@@ -1003,8 +1003,10 @@ def on_connect(c, userdata, flags, rc):
     
     if CLOUD_PREFIX:
         c.subscribe(f"{CLOUD_PREFIX}/+/from", qos=0)
+        c.subscribe(f"{CLOUD_PREFIX}/+/to", qos=0)
     else:
         c.subscribe("+/+/from", qos=0)
+        c.subscribe("+/+/to", qos=0)
         if DEBUG:
             c.subscribe("#", qos=0)
     
@@ -1021,7 +1023,7 @@ def on_connect(c, userdata, flags, rc):
     except Exception:
         pass
     if DEBUG:
-        print("[BRIDGE]","Subscribed:", f"{CLOUD_PREFIX or '+/+'}/from and {TOPIC_PREFIX}/+/cmd/#", file=sys.stderr, flush=True)
+        print("[BRIDGE]","Subscribed:", f"{CLOUD_PREFIX or '+/+'}/from, {CLOUD_PREFIX or '+/+'}/to and {TOPIC_PREFIX}/+/cmd/#", file=sys.stderr, flush=True)
 
 # [BRIDGE DOC] Route frames to publishers; handle valve command and forward to cloud.
 def on_message(c, userdata, msg):
@@ -1041,7 +1043,7 @@ def on_message(c, userdata, msg):
         t = msg.topic
         if DEBUG:
             log("RX", t)
-        if t.endswith("/from") and t.count("/") >= 2:
+        if (t.endswith("/from") or t.endswith("/to")) and t.count("/") >= 2:
             
             mac = t.split("/")[1]
             try:

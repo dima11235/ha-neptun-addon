@@ -142,3 +142,4 @@ mqtt_server: mqtt://core-mosquitto:1883
  - 0.1.63 - Fix device_time publishing and avoid retained time-set command; extrapolate when TLV 0x44 is absent.
  - 0.1.64 - Remove device_time extrapolation and optimistic publish; only publish time when provided by device.
  - 0.1.65 - Send time set as local ASCII "DD/MM/YYYY,HH:MM:SS" (TLV 0x44) per device expectation.
+ - 0.1.66 - Subscribe to both `<prefix>/+/from` and `<prefix>/+/to` to handle device frames published under `/to`.
