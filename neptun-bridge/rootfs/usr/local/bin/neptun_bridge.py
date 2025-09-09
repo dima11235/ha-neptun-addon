@@ -743,17 +743,10 @@ def publish_system(mac_from_topic, buf: bytes):
         last_seen[mac] = time.time()
     except Exception:
         pass
-    # Track device-provided time if present
-    # Publish device time only when provided by device (no extrapolation)
+    # Track device-provided time if present (no extrapolation)
     try:
         if "device_time_epoch" in st:
-            dev_epoch = int(st.get("device_time_epoch"))
-            last_dev_epoch[mac] = dev_epoch
-            try:
-                dt_iso = datetime.fromtimestamp(dev_epoch).astimezone().isoformat()
-            except Exception:
-                dt_iso = str(dev_epoch)
-            pub(f"{base}/device_time", dt_iso, retain=True)
+            last_dev_epoch[mac] = int(st.get("device_time_epoch"))
     except Exception:
         pass
     
