@@ -148,3 +148,4 @@ mqtt_server: mqtt://core-mosquitto:1883
  - 0.1.69 - Publish `device_time` as local ISO8601 with timezone offset (matches device semantics).
  - 0.1.70 - Add Module RSSI sensor (0..4) and discovery; publish to `neptun/<MAC>/signal_level`.
  - 0.1.71 - Module RSSI: add unit_of_measurement (bars) and state_class=measurement.
+ - 0.1.72 - RSSI values converted to percent (0..100%) for module and sensors; discovery units updated to %.

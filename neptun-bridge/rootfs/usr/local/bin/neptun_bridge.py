@@ -126,6 +126,16 @@ def normalize_battery(v):
     if x > 100: x = 100
     return x
 
+# Convert 0..4 RSSI bars to percent 0..100
+def rssi_bars_to_percent(v):
+    try:
+        x = int(v)
+    except Exception:
+        return None
+    if x < 0: x = 0
+    if x > 4: x = 4
+    return x * 25
+
 # Unified builder for Home Assistant device descriptor
 def make_device(mac: str):
     """Return (device_dict, safe_mac, dev_id) for consistent HA discovery.
@@ -552,7 +562,7 @@ def ensure_discovery(mac):
         "name": f"Module RSSI",
         "unique_id": rssi_id,
         "state_topic": f"{TOPIC_PREFIX}/{mac}/signal_level",
-        "unit_of_measurement": "bars",
+        "unit_of_measurement": "%",
         "state_class": "measurement",
         "icon": "mdi:wifi",
         "entity_category": "diagnostic",
@@ -779,13 +789,13 @@ def publish_system(mac_from_topic, buf: bytes):
         entry = {
             "line": s["sensor_id"],
             "attention": 1 if s["leak"] else 0,
-            "signal_level": s["signal_level"]
+            "signal_level": rssi_bars_to_percent(s.get("signal_level", 0)) or 0
         }
         if nb is not None:
             entry["battery"] = nb
             pub(f"{base}/sensors_status/{s['sensor_id']}/battery", nb, retain=False)
         sensors_status.append(entry)
-        pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", s["signal_level"], retain=False)
+        pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", rssi_bars_to_percent(s.get("signal_level", 0)) or 0, retain=False)
         pub(f"{base}/sensors_status/{s['sensor_id']}/attention", 1 if s["leak"] else 0, retain=False)
              
         obj_id = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_leak"
@@ -815,7 +825,7 @@ def publish_system(mac_from_topic, buf: bytes):
             "name": f"Sensor {s['sensor_id']} RSSI",
             "unique_id": obj_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/signal_level",
-            "unit_of_measurement": "lqi",
+            "unit_of_measurement": "%",
             "icon": "mdi:signal",
             "entity_category": "diagnostic",
             "device": device
@@ -860,7 +870,12 @@ def publish_system(mac_from_topic, buf: bytes):
         pub(f"{base}/settings/lines_in/{k}", li[k], retain=True)
     
     if "device_id" in st: pub(f"{base}/device_id", st["device_id"], retain=True)
-    if "W" in st: pub(f"{base}/signal_level", st["W"], retain=False)
+    if "W" in st:
+        try:
+            w = rssi_bars_to_percent(st.get("W", 0)) or 0
+        except Exception:
+            w = 0
+        pub(f"{base}/signal_level", w, retain=False)
     # Device time (if provided): publish epoch and local ISO8601 with offset
     try:
         if "device_time_epoch" in st:
@@ -965,11 +980,11 @@ def publish_sensor_state(mac_from_topic, buf: bytes):
         slim = []
         for s in sensors:
             nb = normalize_battery(s.get("battery_percent", 0))
-            e = {"line": s["sensor_id"], "attention": 1 if s["leak"] else 0, "signal_level": s["signal_level"]}
+        e = {"line": s["sensor_id"], "attention": 1 if s["leak"] else 0, "signal_level": rssi_bars_to_percent(s.get("signal_level", 0)) or 0}
             if nb is not None:
                 e["battery"] = nb
                 pub(f"{base}/sensors_status/{s['sensor_id']}/battery", nb, retain=False)
-            pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", s["signal_level"], retain=False)
+        pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", rssi_bars_to_percent(s.get("signal_level", 0)) or 0, retain=False)
             pub(f"{base}/sensors_status/{s['sensor_id']}/attention", 1 if s["leak"] else 0, retain=False)
             slim.append(e)
         pub(f"{base}/sensors_status/json", slim, retain=False)
