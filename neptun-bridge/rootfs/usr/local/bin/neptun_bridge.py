@@ -552,6 +552,8 @@ def ensure_discovery(mac):
         "name": f"Module RSSI",
         "unique_id": rssi_id,
         "state_topic": f"{TOPIC_PREFIX}/{mac}/signal_level",
+        "unit_of_measurement": "bars",
+        "state_class": "measurement",
         "icon": "mdi:wifi",
         "entity_category": "diagnostic",
         "device": device
