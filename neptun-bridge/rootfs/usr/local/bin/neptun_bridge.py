@@ -530,12 +530,12 @@ def ensure_discovery(mac):
         pub(f"{DISCOVERY_PRE}/number/{numS_id}/config", numS_conf, retain=True)
 
     # Device time (timestamp sensor)
-    dt_id = f"neptun_{safe_mac}_device_time"
+    dt_id = f"neptun_{safe_mac}_last_seen"
     dt_conf = {
-        "name": f"Device Time",
+        "name": f"Last Seen",
         "unique_id": dt_id,
         "state_topic": f"{TOPIC_PREFIX}/{mac}/device_time",
-        #"device_class": "timestamp",
+        "device_class": "timestamp",
         "entity_category": "diagnostic",
         "entity_registry_enabled_default": False,
         "device": device
