@@ -150,3 +150,4 @@ mqtt_server: mqtt://core-mosquitto:1883
  - 0.1.71 - Module RSSI: add unit_of_measurement (bars) and state_class=measurement.
  - 0.1.72 - RSSI values converted to percent (0..100%) for module and sensors; discovery units updated to %.
  - 0.1.73 - Tweak sensor state publishing (optimize JSON aggregate); minor fixes.
+ - 0.1.74 - Fix device_time local ISO: avoid double +offset (subtract local UTC offset once before formatting).

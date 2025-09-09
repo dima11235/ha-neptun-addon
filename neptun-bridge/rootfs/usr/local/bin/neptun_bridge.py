@@ -880,8 +880,16 @@ def publish_system(mac_from_topic, buf: bytes):
     try:
         if "device_time_epoch" in st:
             ts = int(st["device_time_epoch"])
+            # Device reports epoch-like SECONDS IN LOCAL CLOCK (not UTC).
+            # To get correct local wall time, subtract current local UTC offset once,
+            # then format as local ISO (to avoid applying offset twice).
             try:
-                iso = datetime.fromtimestamp(ts).astimezone().isoformat()
+                off = datetime.now().astimezone().utcoffset()
+                off_s = int(off.total_seconds()) if off else 0
+            except Exception:
+                off_s = 0
+            try:
+                iso = datetime.fromtimestamp(ts - off_s).astimezone().isoformat()
             except Exception:
                 iso = str(ts)
             pub(f"{base}/device_time_epoch", ts, retain=True)
