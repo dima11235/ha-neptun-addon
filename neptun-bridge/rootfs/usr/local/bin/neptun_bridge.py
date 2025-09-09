@@ -546,6 +546,18 @@ def ensure_discovery(mac):
     }
     pub(f"{DISCOVERY_PRE}/sensor/{drift_id}/config", drift_conf, retain=True)
 
+    # Module RSSI (0..4 bars) as reported by device (TLV 0x57 -> st["W"]) 
+    rssi_id = f"neptun_{safe_mac}_module_rssi"
+    rssi_conf = {
+        "name": f"Module RSSI",
+        "unique_id": rssi_id,
+        "state_topic": f"{TOPIC_PREFIX}/{mac}/signal_level",
+        "icon": "mdi:wifi",
+        "entity_category": "diagnostic",
+        "device": device
+    }
+    pub(f"{DISCOVERY_PRE}/sensor/{rssi_id}/config", rssi_conf, retain=True)
+
     # Button to set device time to current host time
     btn_id = f"neptun_{safe_mac}_set_time_now"
     btn_conf = {
