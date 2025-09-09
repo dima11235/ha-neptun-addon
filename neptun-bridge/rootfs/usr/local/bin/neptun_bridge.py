@@ -980,11 +980,11 @@ def publish_sensor_state(mac_from_topic, buf: bytes):
         slim = []
         for s in sensors:
             nb = normalize_battery(s.get("battery_percent", 0))
-        e = {"line": s["sensor_id"], "attention": 1 if s["leak"] else 0, "signal_level": rssi_bars_to_percent(s.get("signal_level", 0)) or 0}
+            e = {"line": s["sensor_id"], "attention": 1 if s["leak"] else 0, "signal_level": rssi_bars_to_percent(s.get("signal_level", 0)) or 0}
             if nb is not None:
                 e["battery"] = nb
                 pub(f"{base}/sensors_status/{s['sensor_id']}/battery", nb, retain=False)
-        pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", rssi_bars_to_percent(s.get("signal_level", 0)) or 0, retain=False)
+            pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", rssi_bars_to_percent(s.get("signal_level", 0)) or 0, retain=False)
             pub(f"{base}/sensors_status/{s['sensor_id']}/attention", 1 if s["leak"] else 0, retain=False)
             slim.append(e)
         pub(f"{base}/sensors_status/json", slim, retain=False)
