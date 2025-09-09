@@ -145,3 +145,4 @@ mqtt_server: mqtt://core-mosquitto:1883
  - 0.1.66 - Subscribe to both `<prefix>/+/from` and `<prefix>/+/to` to handle device frames published under `/to`.
  - 0.1.67 - Make time-set command retained (device clears `/to` after processing) to ensure delivery after reconnect.
  - 0.1.68 - Fix duplicate `device_time` publishes (local tz vs UTC) causing +offset jumps; publish once (UTC ISO) only when device provides TLV 0x44.
+ - 0.1.69 - Publish `device_time` as local ISO8601 with timezone offset (matches device semantics).

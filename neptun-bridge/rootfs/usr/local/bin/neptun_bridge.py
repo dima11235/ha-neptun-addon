@@ -847,18 +847,14 @@ def publish_system(mac_from_topic, buf: bytes):
     
     if "device_id" in st: pub(f"{base}/device_id", st["device_id"], retain=True)
     if "W" in st: pub(f"{base}/signal_level", st["W"], retain=False)
-    # Device time (if provided): publish both epoch and ISO8601 UTC
+    # Device time (if provided): publish epoch and local ISO8601 with offset
     try:
         if "device_time_epoch" in st:
             ts = int(st["device_time_epoch"])
-            # Device time is reported in LOCAL time (epoch-like seconds for local clock).
-            # Convert to ISO UTC by subtracting local UTC offset.
             try:
-                off = datetime.now().astimezone().utcoffset()
-                off_s = int(off.total_seconds()) if off else 0
+                iso = datetime.fromtimestamp(ts).astimezone().isoformat()
             except Exception:
-                off_s = 0
-            iso = datetime.fromtimestamp(ts - off_s, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                iso = str(ts)
             pub(f"{base}/device_time_epoch", ts, retain=True)
             pub(f"{base}/device_time", iso, retain=True)
     except Exception:
