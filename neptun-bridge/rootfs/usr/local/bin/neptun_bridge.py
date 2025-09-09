@@ -535,7 +535,7 @@ def ensure_discovery(mac):
         "name": f"Device Time",
         "unique_id": dt_id,
         "state_topic": f"{TOPIC_PREFIX}/{mac}/device_time",
-        "device_class": "timestamp",
+        #"device_class": "timestamp",
         "entity_category": "diagnostic",
         "entity_registry_enabled_default": False,
         "device": device
