@@ -605,7 +605,7 @@ def ensure_discovery(mac):
             "unique_id": t_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/lines_in/line_{i}",
             "icon": "mdi:label",
-            "entity_category": "diagnostic",
+            # "entity_category": "diagnostic",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{t_id}/config", t_conf, retain=True)
