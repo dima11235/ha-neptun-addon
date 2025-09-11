@@ -650,15 +650,15 @@ def ensure_discovery(mac):
     pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_alert_id}/config", mod_alert_conf, retain=True)
 
     # Valve State
-    valve_closed_id = f"neptun_{safe_mac}_valve_open"
+    valve_closed_id = f"neptun_{safe_mac}_valve_closed"
     valve_closed_conf = {
-        "name": f"Valve Open",
+        "name": f"Valve Closed",
         "unique_id": valve_closed_id,
         "state_topic": f"{base_topic}/state/valve_open",
-        "payload_on": "1",
-        "payload_off": "0",
-        "device_class": "opening",
-        "icon": "mdi:valve",
+        "payload_on": "0",
+        "payload_off": "1",
+        "device_class": "problem",
+        "icon": "mdi:water-pump-off",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{valve_closed_id}/config", valve_closed_conf, retain=True)
@@ -690,27 +690,29 @@ def ensure_discovery(mac):
     pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_batt_id}/config", sens_batt_conf, retain=True)
 
     # Sensors Lost
-    sens_lost_id = f"neptun_{safe_mac}_sensors_online"
+    sens_lost_id = f"neptun_{safe_mac}_sensors_lost"
     sens_lost_conf = {
-        "name": f"Sensors Online",
+        "name": f"Sensors Lost",
         "unique_id": sens_lost_id,
         "state_topic": f"{base_topic}/settings/status/sensors_lost",
-        "payload_on": "no",
-        "payload_off": "yes",
-        "device_class": "connectivity",
+        "payload_on": "yes",
+        "payload_off": "no",
+        "device_class": "problem",
+        "icon": "mdi:wifi-off",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_lost_id}/config", sens_lost_conf, retain=True)
 
     # Module Lost (no data received > timeout), locally computed
-    mod_lost_id = f"neptun_{safe_mac}_module_online"
+    mod_lost_id = f"neptun_{safe_mac}_module_lost"
     mod_lost_conf = {
-        "name": f"Module Online",
+        "name": f"Module Lost",
         "unique_id": mod_lost_id,
         "state_topic": f"{base_topic}/settings/status/module_lost",
-        "payload_on": "no",
-        "payload_off": "yes",
-        "device_class": "connectivity",
+        "payload_on": "yes",
+        "payload_off": "no",
+        "device_class": "problem",
+        "icon": "mdi:cloud-off-outline",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_lost_id}/config", mod_lost_conf, retain=True)
