@@ -279,9 +279,9 @@ def icon_color(kind: str, value) -> str:
             return "var(--red-color)" if v in ("yes", "on", "1", "true") else "var(--green-color)"
         if k == "signal":
             x = int(float(value))
-            if x < 25: return "var(--red-color)"
-            if x < 50: return "var(--orange-color)"
-            if x < 75: return "var(--yellow-color)"
+            if x <= 25: return "var(--red-color)"
+            if x <= 50: return "var(--orange-color)"
+            if x <= 75: return "var(--yellow-color)"
             return "var(--green-color)"
         if k == "status_text":
             return "var(--green-color)" if str(value).strip().upper() == "NORMAL" else "var(--orange-color)"
@@ -311,13 +311,13 @@ def icon_name(kind: str, value) -> str:
         if k == "valve_closed":
             # value is valve_open string ("1" open/"0" closed)
             v = str(value).strip()
-            return "mdi:valve-closed" if v == "0" else "mdi:valve-open"
+            return "mdi:water-pump-off" if v == "0" else "mdi:water-pump"
         if k == "battery_flag":
             v = str(value).strip().lower()
             return "mdi:battery-alert" if v in ("yes", "on", "1", "true") else "mdi:battery"
         if k == "signal":
             x = int(float(value))
-            if x <= 0: return "mdi:signal-off"
+            if x == 0: return "mdi:signal-off"
             if x <= 25: return "mdi:signal-cellular-outline"
             if x <= 50: return "mdi:signal-cellular-1"
             if x <= 75: return "mdi:signal-cellular-2"
@@ -1187,6 +1187,29 @@ def publish_system(mac_from_topic, buf: bytes):
                 {"icon_color": icon_color("valve_closed", v), "icon": icon_name("valve_closed", v)},
                 retain=False,
             )
+        except Exception:
+            pass
+        # Republish discovery for valve_closed only when state bucket changes (open/closed)
+        try:
+            bucket = ("open" if v == "1" else "closed")
+            prev_cache = state_cache.get(mac, {})
+            last_b = prev_cache.get("valve_state_bucket")
+            if bucket != last_b:
+                valve_closed_id = f"neptun_{safe_mac}_valve_closed"
+                valve_closed_conf = {
+                    "name": f"Valve Closed",
+                    "unique_id": valve_closed_id,
+                    "state_topic": f"{base}/state/valve_open",
+                    "payload_on": "0",
+                    "payload_off": "1",
+                    "device_class": "problem",
+                    "icon": icon_name("valve_closed", v),
+                    "json_attributes_topic": f"{base}/attributes/valve_closed",
+                    "device": device
+                }
+                pub(f"{DISCOVERY_PRE}/binary_sensor/{valve_closed_id}/config", valve_closed_conf, retain=True)
+                prev_cache["valve_state_bucket"] = bucket
+                state_cache[mac] = prev_cache
         except Exception:
             pass
     if "status" in st: pub(f"{base}/state/status", st["status"], retain=False)
