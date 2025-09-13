@@ -1420,6 +1420,34 @@ def _retry_apply_dry_flag(mac: str, want_on: bool):
             # If we still don't know prefix, break early
             break
 
+def _retry_apply_valve(mac: str, want_open: bool):
+    # Retry if valve state did not reflect desired value
+    for i in range(MAX_RETRIES):
+        try:
+            cur = bool(state_cache.get(mac, {}).get("valve_open", False))
+        except Exception:
+            cur = None
+        if cur == want_open:
+            return
+        time.sleep(RETRY_DELAY_SEC)
+        ok = publish_settings(mac, open_valve=want_open)
+        if not ok:
+            break
+
+def _retry_apply_close_on_offline(mac: str, want_on: bool):
+    # Retry if close_on_offline flag did not reflect desired value
+    for i in range(MAX_RETRIES):
+        try:
+            cur = bool(state_cache.get(mac, {}).get("flag_cl_valve", False))
+        except Exception:
+            cur = None
+        if cur == want_on:
+            return
+        time.sleep(RETRY_DELAY_SEC)
+        ok = publish_settings(mac, close_on_offline=want_on)
+        if not ok:
+            break
+
 # [BRIDGE DOC] Subscribe to upstream `<prefix>/+/from` and local `neptun/+/cmd/#`.
 def on_connect(c, userdata, flags, rc):
     log("MQTT connected", rc)
@@ -1545,6 +1573,10 @@ def on_message(c, userdata, msg):
                     )
                 except Exception:
                     pass
+                try:
+                    threading.Thread(target=_retry_apply_valve, args=(mac, want_open), daemon=True).start()
+                except Exception:
+                    pass
             elif cmd[:1] == ["dry_flag"]:
                 pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
                 up = pl.upper()
@@ -1599,6 +1631,10 @@ def on_message(c, userdata, msg):
                 state_cache[mac] = st
                 base = f"{TOPIC_PREFIX}/{mac}"
                 pub(f"{base}/settings/close_valve_flag", "close" if want_on else "open", retain=True)
+                try:
+                    threading.Thread(target=_retry_apply_close_on_offline, args=(mac, want_on), daemon=True).start()
+                except Exception:
+                    pass
 
             elif cmd[:2] == ["time", "set"]:
                 # Accepts either numeric epoch seconds, ISO string, or 'now'
