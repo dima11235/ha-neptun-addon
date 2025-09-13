@@ -301,10 +301,10 @@ def icon_name(kind: str, value) -> str:
             return "mdi:water-alert" if is_on else "mdi:water-off"
         if k in ("sensors_lost",):
             v = str(value).strip().lower()
-            return "mdi:wifi-alert" if v in ("yes", "on", "1", "true") else "mdi:wifi"
+            return "mdi:signal-off" if v in ("yes", "on", "1", "true") else "mdi:signal"
         if k in ("module_lost",):
             v = str(value).strip().lower()
-            return "mdi:cloud-off-outline" if v in ("yes", "on", "1", "true") else "mdi:cloud-check-outline"
+            return "mdi:server-off" if v in ("yes", "on", "1", "true") else "mdi:server"
         if k in ("module_alert",):
             v = str(value).strip().lower()
             return "mdi:alert-circle-outline" if v in ("yes", "on", "1", "true") else "mdi:check-circle-outline"
@@ -797,7 +797,7 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "problem",
-        "icon": "mdi:wifi-off",
+        "icon": "mdi:signal-off",
         "json_attributes_topic": f"{base_topic}/attributes/sensors_lost",
         "device": device
     }
@@ -812,7 +812,7 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "problem",
-        "icon": "mdi:cloud-off-outline",
+        "icon": "mdi:server-off",
         "json_attributes_topic": f"{base_topic}/attributes/module_lost",
         "device": device
     }
@@ -1008,6 +1008,30 @@ def publish_system(mac_from_topic, buf: bytes):
             {"icon_color": icon_color("sensors_lost", settings["status"]["sensors_lost"]), "icon": icon_name("sensors_lost", settings["status"]["sensors_lost"])},
             retain=False,
         )
+    except Exception:
+        pass
+    # Update discovery icon when sensors_lost bucket changes
+    try:
+        bucket = str(settings["status"]["sensors_lost"]).strip().lower()
+        prev_cache = state_cache.get(mac, {})
+        last_b = prev_cache.get("sensors_lost_bucket")
+        if bucket != last_b:
+            device, safe_mac, dev_id = make_device(mac)
+            sens_lost_id = f"neptun_{safe_mac}_sensors_lost"
+            sens_lost_conf = {
+                "name": f"Sensors Lost",
+                "unique_id": sens_lost_id,
+                "state_topic": f"{base}/settings/status/sensors_lost",
+                "payload_on": "yes",
+                "payload_off": "no",
+                "device_class": "problem",
+                "icon": icon_name("sensors_lost", bucket),
+                "json_attributes_topic": f"{base}/attributes/sensors_lost",
+                "device": device
+            }
+            pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_lost_id}/config", sens_lost_conf, retain=True)
+            prev_cache["sensors_lost_bucket"] = bucket
+            state_cache[mac] = prev_cache
     except Exception:
         pass
     pub(f"{base}/settings/status/battery_discharge_in_module", settings["status"]["battery_discharge_in_module"], retain=True)
@@ -1664,6 +1688,29 @@ def main():
                                 {"icon_color": icon_color("module_lost", val), "icon": icon_name("module_lost", val)},
                                 retain=False,
                             )
+                        except Exception:
+                            pass
+                        # Update discovery icon when module_lost bucket changes
+                        try:
+                            prev_cache = state_cache.get(mac, {})
+                            last_b = prev_cache.get("module_lost_bucket")
+                            if val != last_b:
+                                device, safe_mac, dev_id = make_device(mac)
+                                mod_lost_id = f"neptun_{safe_mac}_module_lost"
+                                mod_lost_conf = {
+                                    "name": f"Module Lost",
+                                    "unique_id": mod_lost_id,
+                                    "state_topic": f"{base}/settings/status/module_lost",
+                                    "payload_on": "yes",
+                                    "payload_off": "no",
+                                    "device_class": "problem",
+                                    "icon": icon_name("module_lost", val),
+                                    "json_attributes_topic": f"{base}/attributes/module_lost",
+                                    "device": device
+                                }
+                                pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_lost_id}/config", mod_lost_conf, retain=True)
+                                prev_cache["module_lost_bucket"] = val
+                                state_cache[mac] = prev_cache
                         except Exception:
                             pass
                     except Exception:
