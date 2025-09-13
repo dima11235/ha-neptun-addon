@@ -281,7 +281,6 @@ def icon_color(kind: str, value) -> str:
             x = int(float(value))
             if x <= 25: return "var(--red-color)"
             if x <= 50: return "var(--orange-color)"
-            if x <= 75: return "var(--yellow-color)"
             return "var(--green-color)"
         if k == "status_text":
             return "var(--green-color)" if str(value).strip().upper() == "NORMAL" else "var(--orange-color)"
@@ -317,10 +316,9 @@ def icon_name(kind: str, value) -> str:
             return "mdi:battery-alert" if v in ("yes", "on", "1", "true") else "mdi:battery"
         if k == "signal":
             x = int(float(value))
-            if x == 0: return "mdi:signal-off"
-            if x <= 25: return "mdi:signal-cellular-outline"
-            if x <= 50: return "mdi:signal-cellular-1"
-            if x <= 75: return "mdi:signal-cellular-2"
+            if x == 0: return "mdi:signal-cellular-0"
+            if x <= 25: return "mdi:signal-cellular-1"
+            if x <= 50: return "mdi:signal-cellular-2"
             return "mdi:signal-cellular-3"
         if k == "status_text":
             return "mdi:check-circle-outline" if str(value).strip().upper() == "NORMAL" else "mdi:alert-circle-outline"
