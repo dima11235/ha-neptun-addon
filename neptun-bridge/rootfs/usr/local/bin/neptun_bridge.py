@@ -1381,18 +1381,18 @@ def compose_settings_frame(open_valve: bool, dry=False, close_on_offline=False, 
     return bytes(body + struct.pack(">H", crc))
 
 # Publish a settings frame to cloud for a given MAC using current cache defaults.
-def publish_settings(mac: str, *, open_valve=None, dry=None, close_on_offline=None) -> bool:
+def publish_settings(mac: str, *, open_valve=None, dry=None, close_on_offline=None, line_cfg=None) -> bool:
     st = state_cache.get(mac, {})
     try:
         ov = bool(st.get("valve_open", False)) if open_valve is None else bool(open_valve)
         df = bool(st.get("dry_flag", False)) if dry is None else bool(dry)
         cf = bool(st.get("flag_cl_valve", False)) if close_on_offline is None else bool(close_on_offline)
-        lc = int(st.get("line_in_cfg", 0))
+        lc = int(st.get("line_in_cfg", 0)) if line_cfg is None else int(line_cfg)
     except Exception:
         ov = bool(open_valve) if open_valve is not None else False
         df = bool(dry) if dry is not None else False
         cf = bool(close_on_offline) if close_on_offline is not None else False
-        lc = 0
+        lc = int(line_cfg) if line_cfg is not None else 0
 
     frame = compose_settings_frame(open_valve=ov, dry=df, close_on_offline=cf, line_cfg=lc)
     pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
@@ -1445,6 +1445,110 @@ def _retry_apply_close_on_offline(mac: str, want_on: bool):
             return
         time.sleep(RETRY_DELAY_SEC)
         ok = publish_settings(mac, close_on_offline=want_on)
+        if not ok:
+            break
+
+# Retry and helpers for line type (sensor/counter)
+def _retry_apply_line_type(mac: str, idx: int, want_counter: bool):
+    for i in range(MAX_RETRIES):
+        try:
+            base_cfg = int(state_cache.get(mac, {}).get("line_in_cfg", 0)) & 0x0F
+            mask = 1 << (idx - 1)
+            cur_is_counter = (base_cfg & mask) != 0
+        except Exception:
+            cur_is_counter = None
+        if cur_is_counter == want_counter:
+            return
+        time.sleep(RETRY_DELAY_SEC)
+        try:
+            # Recompute using freshest base_cfg each try
+            base_cfg = int(state_cache.get(mac, {}).get("line_in_cfg", 0)) & 0x0F
+        except Exception:
+            base_cfg = 0
+        mask = 1 << (idx - 1)
+        new_cfg = (base_cfg | mask) if want_counter else (base_cfg & (~mask & 0x0F))
+        ok = publish_settings(mac, line_cfg=new_cfg)
+        if not ok:
+            break
+
+# Counters publish helper and retries
+def publish_counters_update(mac: str, lines_vals_steps: dict) -> bool:
+    """Publish counters frame built from updates dict {idx: (value, step)}.
+
+    Merges with last known defaults from state_cache[mac]['counters_last']
+    to avoid zeroing other lines.
+    """
+    # Prepare defaults from last seen raw values
+    last = state_cache.get(mac, {}).get("counters_last", [])
+    defaults = {}
+    for i in range(1,5):
+        try:
+            rv, rs = last[i-1]
+        except Exception:
+            rv, rs = 0, 0
+        defaults[i] = (rv, rs)
+
+    # Build full payload
+    lines = {}
+    for i in range(1,5):
+        val, stp = defaults[i]
+        if i in lines_vals_steps:
+            uval, ustp = lines_vals_steps[i]
+            val = int(max(0, int(uval)))
+            if ustp is not None:
+                try:
+                    stp = int(ustp)
+                except Exception:
+                    pass
+        lines[i] = (val, stp)
+
+    frame = compose_counters_set_frame(lines)
+    pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
+    if not pref:
+        log("No cloud prefix known for", mac, ", waiting for incoming frame to learn it")
+        return False
+    try:
+        client.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
+        return True
+    except Exception:
+        return False
+
+def _retry_apply_counter_value(mac: str, idx: int, desired_liters: int):
+    for i in range(MAX_RETRIES):
+        try:
+            last = state_cache.get(mac, {}).get("counters_last", [])
+            cur_val = int(last[idx-1][0]) if len(last) >= idx else None
+        except Exception:
+            cur_val = None
+        if cur_val == int(desired_liters):
+            return
+        time.sleep(RETRY_DELAY_SEC)
+        # Reuse current step if known
+        try:
+            last = state_cache.get(mac, {}).get("counters_last", [])
+            cur_step = int(last[idx-1][1]) if len(last) >= idx else 0
+        except Exception:
+            cur_step = 0
+        ok = publish_counters_update(mac, {idx: (int(desired_liters), cur_step)})
+        if not ok:
+            break
+
+def _retry_apply_counter_step(mac: str, idx: int, desired_step: int):
+    for i in range(MAX_RETRIES):
+        try:
+            last = state_cache.get(mac, {}).get("counters_last", [])
+            cur_step = int(last[idx-1][1]) if len(last) >= idx else None
+        except Exception:
+            cur_step = None
+        if cur_step == int(desired_step):
+            return
+        time.sleep(RETRY_DELAY_SEC)
+        try:
+            last = state_cache.get(mac, {}).get("counters_last", [])
+            cur_val = int(last[idx-1][0]) if len(last) >= idx else 0
+        except Exception:
+            cur_val = 0
+        ok = publish_counters_update(mac, {idx: (cur_val, int(desired_step))})
         if not ok:
             break
 
@@ -1644,6 +1748,36 @@ def on_message(c, userdata, msg):
                 log("CMD time set (retained) ->", mac, epoch)
 
             elif len(cmd) >= 1 and cmd[0].startswith("line_") and cmd[0].endswith("_type"):
+                # Unified handler for line type changes using publish_settings + retry
+                try:
+                    part = cmd[0]  # e.g. line_1_type
+                    idx = int(part.split("_")[1])
+                except Exception:
+                    idx = None
+                if idx is None or not (1 <= idx <= 4):
+                    return
+                pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip().lower()
+                want_counter = pl in ("1","on","true","yes","counter") or pl == "counter"
+                try:
+                    base_cfg = int(state_cache.get(mac, {}).get("line_in_cfg", 0)) & 0x0F
+                except Exception:
+                    base_cfg = 0
+                mask = 1 << (idx - 1)
+                new_cfg = (base_cfg | mask) if want_counter else (base_cfg & (~mask & 0x0F))
+                ok = publish_settings(mac, line_cfg=new_cfg)
+                if not ok:
+                    return
+                log(f"CMD line_{idx}_type ->", mac, "counter" if want_counter else "sensor")
+                base = f"{TOPIC_PREFIX}/{mac}"
+                # Publish UI hint; device confirmation will follow in next frame
+                pub(f"{base}/settings/lines_in/line_{idx}", "counter" if want_counter else "sensor", retain=True)
+                try:
+                    threading.Thread(target=_retry_apply_line_type, args=(mac, idx, want_counter), daemon=True).start()
+                except Exception:
+                    pass
+                return
+
+            elif len(cmd) >= 1 and cmd[0].startswith("line_") and cmd[0].endswith("_type"):
                 try:
                     part = cmd[0]  # e.g. line_1_type
                     idx = int(part.split("_")[1])
@@ -1706,25 +1840,13 @@ def on_message(c, userdata, msg):
                 action = cmd[2]
                 payload = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
 
-                # Prepare defaults from last seen raw values to avoid zeroing other lines
-                last = state_cache.get(mac, {}).get("counters_last", [])
-                defaults = {}
-                for i in range(1,5):
-                    try:
-                        rv, rs = last[i-1]
-                    except Exception:
-                        rv, rs = 0, 0
-                    defaults[i] = (rv, rs)
-
                 updates = {}
                 if action == "value" and len(cmd) >= 4 and cmd[3] == "set":
                     try:
                         desired_l = int(float(payload))
                     except Exception:
                         return
-                    # Keep current step for the line if known
-                    cur_step = defaults.get(idx, (0,0))[1]
-                    updates[idx] = (desired_l, cur_step if cur_step else 0)
+                    updates[idx] = (desired_l, None)
                 elif action == "step" and len(cmd) >= 4 and cmd[3] == "set":
                     try:
                         step = int(float(payload))
@@ -1732,29 +1854,20 @@ def on_message(c, userdata, msg):
                             return
                     except Exception:
                         return
-                    cur_val = defaults.get(idx, (0,0))[0]
-                    updates[idx] = (cur_val, step)
+                    updates[idx] = (None, step)
                 else:
                     return
-
-                # Build full lines payload combining defaults and updates
-                lines = {}
-                for i in range(1,5):
-                    val, stp = defaults[i]
-                    if i in updates:
-                        uval, ustp = updates[i]
-                        val = uval
-                        if ustp:
-                            stp = ustp
-                    lines[i] = (val, stp)
-
-                frame = compose_counters_set_frame(lines)
-                pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
-                if not pref:
-                    log("No cloud prefix known for", mac, ", waiting for incoming frame to learn it")
+                ok = publish_counters_update(mac, updates)
+                if not ok:
                     return
-                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log(f"CMD counters line_{idx} {action} ->", mac, payload)
+                try:
+                    if action == "value":
+                        threading.Thread(target=_retry_apply_counter_value, args=(mac, idx, int(float(payload))), daemon=True).start()
+                    elif action == "step":
+                        threading.Thread(target=_retry_apply_counter_step, args=(mac, idx, int(float(payload))), daemon=True).start()
+                except Exception:
+                    pass
             
 
     except Exception as e:
