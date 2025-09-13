@@ -932,7 +932,7 @@ def publish_system(mac_from_topic, buf: bytes):
             "unique_id": obj_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/signal_level",
             "unit_of_measurement": "%",
-            #"icon": "mdi:signal",
+            "icon": icon_name("signal", sigp),
             "entity_category": "diagnostic",
             "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attributes/signal",
             "device": device
