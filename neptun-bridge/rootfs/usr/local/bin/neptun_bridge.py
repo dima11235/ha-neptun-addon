@@ -263,28 +263,28 @@ def icon_color(kind: str, value) -> str:
             # value may be on/off, yes/no, 1/0, True/False
             v = str(value).strip().lower()
             is_on = v in ("on", "yes", "1", "true", "problem", "closed")
-            return "red" if is_on else "green"
+            return "red" if is_on else "lightgreen"
         if k == "valve_closed":
             # Here value is valve_open ("1" open/"0" closed). Closed -> red
             v = str(value).strip()
-            return "red" if v == "0" else "green"
+            return "red" if v == "0" else "lightgreen"
         if k == "battery_percent":
             x = int(float(value))
             if x < 15: return "red"
             if x < 35: return "orange"
             if x < 60: return "yellow"
-            return "green"
+            return "lightgreen"
         if k == "battery_flag":
             v = str(value).strip().lower()
-            return "red" if v in ("yes", "on", "1", "true") else "green"
+            return "red" if v in ("yes", "on", "1", "true") else "lightgreen"
         if k == "signal":
             x = int(float(value))
             if x < 25: return "red"
             if x < 50: return "orange"
             if x < 75: return "yellow"
-            return "green"
+            return "lightgreen"
         if k == "status_text":
-            return "green" if str(value).strip().upper() == "NORMAL" else "orange"
+            return "lightgreen" if str(value).strip().upper() == "NORMAL" else "orange"
         if k == "counter":
             return "blue"
     except Exception:
