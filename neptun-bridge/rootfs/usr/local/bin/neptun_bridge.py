@@ -259,11 +259,16 @@ def log(*a):
 def icon_color(kind: str, value) -> str:
     try:
         k = (kind or "").lower()
-        if k in ("leak", "problem", "module_lost", "sensors_lost", "module_alert"):
+        if k in ("leak", "problem", "module_lost", "sensors_lost"):
             # value may be on/off, yes/no, 1/0, True/False
             v = str(value).strip().lower()
             is_on = v in ("on", "yes", "1", "true", "problem", "closed")
             return "var(--red-color)" if is_on else "var(--green-color)"
+        if k in ("module_alert"):
+            # value may be on/off, yes/no, 1/0, True/False
+            v = str(value).strip().lower()
+            is_on = v in ("on", "yes", "1", "true", "problem", "closed")
+            return "var(--orange-color)" if is_on else "var(--green-color)"
         if k == "valve_closed":
             # Here value is valve_open ("1" open/"0" closed). Closed -> red
             v = str(value).strip()
@@ -532,7 +537,7 @@ def ensure_discovery(mac):
         "payload_off": "open",
         "qos": 0,
         "retain": False,
-        "icon": "mdi:lan-disconnect",
+        "icon": "mdi:water-alert-outline",
         "entity_category": "config",
         "device": device
     }
@@ -767,6 +772,7 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "battery",
+        "icon": "mdi:car-battery",
         "json_attributes_topic": f"{base_topic}/attributes/module_battery",
         "device": device
     }
@@ -824,7 +830,7 @@ def ensure_discovery(mac):
         "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/module_lost_timeout/set",
         "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/module_lost_timeout",
         "unit_of_measurement": "s",
-        "icon": "mdi:timer-cog-outline",
+        "icon": "mdi:timer-alert-outline",
         "min": 10,
         "max": 3600,
         "step": 1,
