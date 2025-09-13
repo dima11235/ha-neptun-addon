@@ -328,6 +328,22 @@ def icon_name(kind: str, value) -> str:
         pass
     return "mdi:help-circle-outline"
 
+# Map signal percent to bucket string off/1/2/3/4
+def signal_bucket(pct: int) -> str:
+    try:
+        x = int(float(pct))
+    except Exception:
+        return "off"
+    if x <= 0:
+        return "off"
+    if x <= 25:
+        return "1"
+    if x <= 50:
+        return "2"
+    if x <= 75:
+        return "3"
+    return "4"
+
 # [BRIDGE DOC] Publish wrapper: JSON-encode dicts, apply retain default, debug logging.
 def pub(topic, payload, retain=None, qos=0):
     if retain is None: retain = RETAIN_DEFAULT
@@ -927,17 +943,32 @@ def publish_system(mac_from_topic, buf: bytes):
         pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf, retain=True)
 
         obj_id = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_signal_level"
-        conf = {
-            "name": f"Sensor {s['sensor_id']} RSSI",
-            "unique_id": obj_id,
-            "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/signal_level",
-            "unit_of_measurement": "%",
-            "icon": icon_name("signal", sigp),
-            "entity_category": "diagnostic",
-            "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attributes/signal",
-            "device": device
-        }
-        pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf, retain=True)
+        # Republish discovery only when RSSI bucket changes
+        try:
+            sb = signal_bucket(sigp)
+        except Exception:
+            sb = None
+        try:
+            prev_cache = state_cache.get(mac, {})
+            by_id = prev_cache.get("sensor_rssi_bucket") or {}
+            last_sb = by_id.get(int(s['sensor_id']))
+            if sb != last_sb:
+                conf = {
+                    "name": f"Sensor {s['sensor_id']} RSSI",
+                    "unique_id": obj_id,
+                    "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/signal_level",
+                    "unit_of_measurement": "%",
+                    "icon": icon_name("signal", sigp),
+                    "entity_category": "diagnostic",
+                    "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attributes/signal",
+                    "device": device
+                }
+                pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf, retain=True)
+                by_id[int(s['sensor_id'])] = sb
+                prev_cache["sensor_rssi_bucket"] = by_id
+                state_cache[mac] = prev_cache
+        except Exception:
+            pass
 
     if sensors_status:
         pub(f"{base}/sensors_status/json", sensors_status, retain=False)
@@ -1029,6 +1060,30 @@ def publish_system(mac_from_topic, buf: bytes):
                 {"icon_color": icon_color("signal", w), "icon": icon_name("signal", w)},
                 retain=False,
             )
+        except Exception:
+            pass
+        # Only update discovery icon if the RSSI bucket changed (off/1/2/3/4)
+        try:
+            bucket = signal_bucket(w)
+            prev_cache = state_cache.get(mac, {})
+            last_b = prev_cache.get("module_rssi_bucket")
+            if bucket != last_b:
+                device, safe_mac, dev_id = make_device(mac)
+                rssi_id = f"neptun_{safe_mac}_module_rssi"
+                rssi_conf = {
+                    "name": f"Module RSSI",
+                    "unique_id": rssi_id,
+                    "state_topic": f"{TOPIC_PREFIX}/{mac}/signal_level",
+                    "unit_of_measurement": "%",
+                    "state_class": "measurement",
+                    "icon": icon_name("signal", w),
+                    "entity_category": "diagnostic",
+                    "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/attributes/module_rssi",
+                    "device": device
+                }
+                pub(f"{DISCOVERY_PRE}/sensor/{rssi_id}/config", rssi_conf, retain=True)
+                prev_cache["module_rssi_bucket"] = bucket
+                state_cache[mac] = prev_cache
         except Exception:
             pass
     # Device time (if provided): publish epoch and local ISO8601 with offset
