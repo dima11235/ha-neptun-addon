@@ -263,33 +263,33 @@ def icon_color(kind: str, value) -> str:
             # value may be on/off, yes/no, 1/0, True/False
             v = str(value).strip().lower()
             is_on = v in ("on", "yes", "1", "true", "problem", "closed")
-            return "red" if is_on else "lightgreen"
+            return "var(--red-color)" if is_on else "var(--green-color)"
         if k == "valve_closed":
             # Here value is valve_open ("1" open/"0" closed). Closed -> red
             v = str(value).strip()
-            return "red" if v == "0" else "lightgreen"
+            return "var(--red-color)" if v == "0" else "var(--green-color)"
         if k == "battery_percent":
             x = int(float(value))
-            if x < 15: return "red"
-            if x < 35: return "orange"
-            if x < 60: return "yellow"
-            return "lightgreen"
+            if x < 15: return "var(--red-color)"
+            if x < 35: return "var(--orange-color)"
+            if x < 60: return "var(--yellow-color)"
+            return "var(--green-color)"
         if k == "battery_flag":
             v = str(value).strip().lower()
-            return "red" if v in ("yes", "on", "1", "true") else "lightgreen"
+            return "var(--red-color)" if v in ("yes", "on", "1", "true") else "var(--green-color)"
         if k == "signal":
             x = int(float(value))
-            if x < 25: return "red"
-            if x < 50: return "orange"
-            if x < 75: return "yellow"
-            return "lightgreen"
+            if x < 25: return "var(--red-color)"
+            if x < 50: return "var(--orange-color)"
+            if x < 75: return "var(--yellow-color)"
+            return "var(--green-color)"
         if k == "status_text":
-            return "lightgreen" if str(value).strip().upper() == "NORMAL" else "orange"
+            return "var(--green-color)" if str(value).strip().upper() == "NORMAL" else "var(--orange-color)"
         if k == "counter":
-            return "blue"
+            return "var(--blue-color)"
     except Exception:
         pass
-    return "grey"
+    return "var(--grey-color)"
 
 # [BRIDGE DOC] Publish wrapper: JSON-encode dicts, apply retain default, debug logging.
 def pub(topic, payload, retain=None, qos=0):
