@@ -604,6 +604,7 @@ def ensure_discovery(mac):
         "state_class": "measurement",
         "icon": "mdi:wifi",
         "entity_category": "diagnostic",
+        "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/attributes/module_rssi",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/sensor/{rssi_id}/config", rssi_conf, retain=True)
@@ -962,6 +963,10 @@ def publish_system(mac_from_topic, buf: bytes):
         except Exception:
             w = 0
         pub(f"{base}/signal_level", w, retain=False)
+        try:
+            pub(f"{base}/attributes/module_rssi", {"icon_color": icon_color("signal", w)}, retain=False)
+        except Exception:
+            pass
     # Device time (if provided): publish epoch and local ISO8601 with offset
     try:
         if "device_time_epoch" in st:
