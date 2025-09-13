@@ -716,6 +716,7 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "battery",
+        "json_attributes_topic": f"{base_topic}/attributes/module_battery",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_batt_id}/config", mod_batt_conf, retain=True)
@@ -729,6 +730,7 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "battery",
+        "json_attributes_topic": f"{base_topic}/attributes/sensors_battery",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_batt_id}/config", sens_batt_conf, retain=True)
@@ -925,7 +927,15 @@ def publish_system(mac_from_topic, buf: bytes):
     except Exception:
         pass
     pub(f"{base}/settings/status/battery_discharge_in_module", settings["status"]["battery_discharge_in_module"], retain=True)
+    try:
+        pub(f"{base}/attributes/module_battery", {"icon_color": icon_color("battery_flag", settings["status"]["battery_discharge_in_module"])}, retain=False)
+    except Exception:
+        pass
     pub(f"{base}/settings/status/battery_discharge_in_sensor", settings["status"]["battery_discharge_in_sensor"], retain=True)
+    try:
+        pub(f"{base}/attributes/sensors_battery", {"icon_color": icon_color("battery_flag", settings["status"]["battery_discharge_in_sensor"])}, retain=False)
+    except Exception:
+        pass
     pub(f"{base}/settings/status/module_alert", settings["status"]["module_alert"], retain=True)
     try:
         pub(f"{base}/attributes/module_alert", {"icon_color": icon_color("module_alert", settings["status"]["module_alert"])}, retain=False)
