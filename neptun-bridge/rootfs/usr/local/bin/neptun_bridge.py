@@ -291,6 +291,43 @@ def icon_color(kind: str, value) -> str:
         pass
     return "var(--grey-color)"
 
+# Compute a matching MDI icon name for the same kinds used in icon_color().
+def icon_name(kind: str, value) -> str:
+    try:
+        k = (kind or "").lower()
+        if k in ("leak",):
+            v = str(value).strip().lower()
+            is_on = v in ("on", "yes", "1", "true", "problem", "closed") or v == "1"
+            return "mdi:water-alert" if is_on else "mdi:water-off"
+        if k in ("sensors_lost",):
+            v = str(value).strip().lower()
+            return "mdi:wifi-alert" if v in ("yes", "on", "1", "true") else "mdi:wifi"
+        if k in ("module_lost",):
+            v = str(value).strip().lower()
+            return "mdi:cloud-off-outline" if v in ("yes", "on", "1", "true") else "mdi:cloud-check-outline"
+        if k in ("module_alert",):
+            v = str(value).strip().lower()
+            return "mdi:alert-circle-outline" if v in ("yes", "on", "1", "true") else "mdi:check-circle-outline"
+        if k == "valve_closed":
+            # value is valve_open string ("1" open/"0" closed)
+            v = str(value).strip()
+            return "mdi:valve-closed" if v == "0" else "mdi:valve-open"
+        if k == "battery_flag":
+            v = str(value).strip().lower()
+            return "mdi:battery-alert" if v in ("yes", "on", "1", "true") else "mdi:battery"
+        if k == "signal":
+            x = int(float(value))
+            if x <= 0: return "mdi:wifi-off"
+            if x <= 25: return "mdi:wifi-strength-1"
+            if x <= 50: return "mdi:wifi-strength-2"
+            if x <= 75: return "mdi:wifi-strength-3"
+            return "mdi:wifi-strength-4"
+        if k == "status_text":
+            return "mdi:check-circle-outline" if str(value).strip().upper() == "NORMAL" else "mdi:alert-circle-outline"
+    except Exception:
+        pass
+    return "mdi:help-circle-outline"
+
 # [BRIDGE DOC] Publish wrapper: JSON-encode dicts, apply retain default, debug logging.
 def pub(topic, payload, retain=None, qos=0):
     if retain is None: retain = RETAIN_DEFAULT
@@ -848,13 +885,21 @@ def publish_system(mac_from_topic, buf: bytes):
         sigp = rssi_bars_to_percent(s.get("signal_level", 0)) or 0
         pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", sigp, retain=False)
         try:
-            pub(f"{base}/sensors_status/{s['sensor_id']}/attributes/signal", {"icon_color": icon_color("signal", sigp)}, retain=False)
+            pub(
+                f"{base}/sensors_status/{s['sensor_id']}/attributes/signal",
+                {"icon_color": icon_color("signal", sigp), "icon": icon_name("signal", sigp)},
+                retain=False,
+            )
         except Exception:
             pass
         att = 1 if s["leak"] else 0
         pub(f"{base}/sensors_status/{s['sensor_id']}/attention", att, retain=False)
         try:
-            pub(f"{base}/sensors_status/{s['sensor_id']}/attributes/leak", {"icon_color": icon_color("leak", att)}, retain=False)
+            pub(
+                f"{base}/sensors_status/{s['sensor_id']}/attributes/leak",
+                {"icon_color": icon_color("leak", att), "icon": icon_name("leak", att)},
+                retain=False,
+            )
         except Exception:
             pass
              
@@ -917,28 +962,48 @@ def publish_system(mac_from_topic, buf: bytes):
     
     pub(f"{base}/settings/status/alert", settings["status"]["alert"], retain=True)
     try:
-        pub(f"{base}/attributes/leak_detected", {"icon_color": icon_color("leak", settings["status"]["alert"])}, retain=False)
+        pub(
+            f"{base}/attributes/leak_detected",
+            {"icon_color": icon_color("leak", settings["status"]["alert"]), "icon": icon_name("leak", settings["status"]["alert"])},
+            retain=False,
+        )
     except Exception:
         pass
     pub(f"{base}/settings/status/dry_flag", settings["status"]["dry_flag"], retain=True)
     pub(f"{base}/settings/status/sensors_lost", settings["status"]["sensors_lost"], retain=True)
     try:
-        pub(f"{base}/attributes/sensors_lost", {"icon_color": icon_color("sensors_lost", settings["status"]["sensors_lost"])}, retain=False)
+        pub(
+            f"{base}/attributes/sensors_lost",
+            {"icon_color": icon_color("sensors_lost", settings["status"]["sensors_lost"]), "icon": icon_name("sensors_lost", settings["status"]["sensors_lost"])},
+            retain=False,
+        )
     except Exception:
         pass
     pub(f"{base}/settings/status/battery_discharge_in_module", settings["status"]["battery_discharge_in_module"], retain=True)
     try:
-        pub(f"{base}/attributes/module_battery", {"icon_color": icon_color("battery_flag", settings["status"]["battery_discharge_in_module"])}, retain=False)
+        pub(
+            f"{base}/attributes/module_battery",
+            {"icon_color": icon_color("battery_flag", settings["status"]["battery_discharge_in_module"]), "icon": icon_name("battery_flag", settings["status"]["battery_discharge_in_module"])},
+            retain=False,
+        )
     except Exception:
         pass
     pub(f"{base}/settings/status/battery_discharge_in_sensor", settings["status"]["battery_discharge_in_sensor"], retain=True)
     try:
-        pub(f"{base}/attributes/sensors_battery", {"icon_color": icon_color("battery_flag", settings["status"]["battery_discharge_in_sensor"])}, retain=False)
+        pub(
+            f"{base}/attributes/sensors_battery",
+            {"icon_color": icon_color("battery_flag", settings["status"]["battery_discharge_in_sensor"]), "icon": icon_name("battery_flag", settings["status"]["battery_discharge_in_sensor"])},
+            retain=False,
+        )
     except Exception:
         pass
     pub(f"{base}/settings/status/module_alert", settings["status"]["module_alert"], retain=True)
     try:
-        pub(f"{base}/attributes/module_alert", {"icon_color": icon_color("module_alert", settings["status"]["module_alert"])}, retain=False)
+        pub(
+            f"{base}/attributes/module_alert",
+            {"icon_color": icon_color("module_alert", settings["status"]["module_alert"]), "icon": icon_name("module_alert", settings["status"]["module_alert"])},
+            retain=False,
+        )
     except Exception:
         pass
     pub(f"{base}/settings/dry_flag", settings["dry_flag"], retain=True)
@@ -959,7 +1024,11 @@ def publish_system(mac_from_topic, buf: bytes):
             w = 0
         pub(f"{base}/signal_level", w, retain=False)
         try:
-            pub(f"{base}/attributes/module_rssi", {"icon_color": icon_color("signal", w)}, retain=False)
+            pub(
+                f"{base}/attributes/module_rssi",
+                {"icon_color": icon_color("signal", w), "icon": icon_name("signal", w)},
+                retain=False,
+            )
         except Exception:
             pass
     # Device time (if provided): publish epoch and local ISO8601 with offset
@@ -1041,7 +1110,11 @@ def publish_system(mac_from_topic, buf: bytes):
             stv = "on" if (is_sensor_line and wired_active and not wireless_same_zone) else "off"
             pub(f"{base}/lines_status/line_{i+1}", stv, retain=False)
             try:
-                pub(f"{base}/lines_status/line_{i+1}/attributes", {"icon_color": icon_color("leak", stv)}, retain=False)
+                pub(
+                    f"{base}/lines_status/line_{i+1}/attributes",
+                    {"icon_color": icon_color("leak", stv), "icon": icon_name("leak", stv)},
+                    retain=False,
+                )
             except Exception:
                 pass
 
@@ -1054,14 +1127,22 @@ def publish_system(mac_from_topic, buf: bytes):
         v = "1" if st["valve_open"] else "0"
         pub(f"{base}/state/valve_open", v, retain=False)
         try:
-            pub(f"{base}/attributes/valve_closed", {"icon_color": icon_color("valve_closed", v)}, retain=False)
+            pub(
+                f"{base}/attributes/valve_closed",
+                {"icon_color": icon_color("valve_closed", v), "icon": icon_name("valve_closed", v)},
+                retain=False,
+            )
         except Exception:
             pass
     if "status" in st: pub(f"{base}/state/status", st["status"], retain=False)
     if "status_name" in st and st["status_name"]:
         pub(f"{base}/state/status_name", st["status_name"], retain=False)
         try:
-            pub(f"{base}/attributes/module_status", {"icon_color": icon_color("status_text", st["status_name"])}, retain=False)
+            pub(
+                f"{base}/attributes/module_status",
+                {"icon_color": icon_color("status_text", st["status_name"]), "icon": icon_name("status_text", st["status_name"])},
+                retain=False,
+            )
         except Exception:
             pass
 
@@ -1096,13 +1177,21 @@ def publish_sensor_state(mac_from_topic, buf: bytes):
             sigp = rssi_bars_to_percent(s.get("signal_level", 0)) or 0
             pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", sigp, retain=False)
             try:
-                pub(f"{base}/sensors_status/{s['sensor_id']}/attributes/signal", {"icon_color": icon_color("signal", sigp)}, retain=False)
+                pub(
+                    f"{base}/sensors_status/{s['sensor_id']}/attributes/signal",
+                    {"icon_color": icon_color("signal", sigp), "icon": icon_name("signal", sigp)},
+                    retain=False,
+                )
             except Exception:
                 pass
             att = 1 if s["leak"] else 0
             pub(f"{base}/sensors_status/{s['sensor_id']}/attention", att, retain=False)
             try:
-                pub(f"{base}/sensors_status/{s['sensor_id']}/attributes/leak", {"icon_color": icon_color("leak", att)}, retain=False)
+                pub(
+                    f"{base}/sensors_status/{s['sensor_id']}/attributes/leak",
+                    {"icon_color": icon_color("leak", att), "icon": icon_name("leak", att)},
+                    retain=False,
+                )
             except Exception:
                 pass
             slim.append(e)
@@ -1492,7 +1581,11 @@ def main():
                         val = "yes" if lost else "no"
                         pub(f"{base}/settings/status/module_lost", val, retain=True)
                         try:
-                            pub(f"{base}/attributes/module_lost", {"icon_color": icon_color("module_lost", val)}, retain=False)
+                            pub(
+                                f"{base}/attributes/module_lost",
+                                {"icon_color": icon_color("module_lost", val), "icon": icon_name("module_lost", val)},
+                                retain=False,
+                            )
                         except Exception:
                             pass
                     except Exception:
