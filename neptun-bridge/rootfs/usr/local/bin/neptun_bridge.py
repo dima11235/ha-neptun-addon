@@ -895,6 +895,14 @@ def publish_system(mac_from_topic, buf: bytes):
         if nb is not None:
             entry["battery"] = nb
             pub(f"{base}/sensors_status/{s['sensor_id']}/battery", nb, retain=False)
+            try:
+                pub(
+                    f"{base}/sensors_status/{s['sensor_id']}/attributes/battery",
+                    {"icon_color": icon_color("battery_percent", nb)},
+                    retain=False,
+                )
+            except Exception:
+                pass
         sensors_status.append(entry)
         sigp = rssi_bars_to_percent(s.get("signal_level", 0)) or 0
         pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", sigp, retain=False)
@@ -936,6 +944,7 @@ def publish_system(mac_from_topic, buf: bytes):
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/battery",
             "unit_of_measurement": "%",
             "device_class": "battery",
+            "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attributes/battery",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf, retain=True)
@@ -1274,6 +1283,14 @@ def publish_sensor_state(mac_from_topic, buf: bytes):
             if nb is not None:
                 e["battery"] = nb
                 pub(f"{base}/sensors_status/{s['sensor_id']}/battery", nb, retain=False)
+                try:
+                    pub(
+                        f"{base}/sensors_status/{s['sensor_id']}/attributes/battery",
+                        {"icon_color": icon_color("battery_percent", nb)},
+                        retain=False,
+                    )
+                except Exception:
+                    pass
             sigp = rssi_bars_to_percent(s.get("signal_level", 0)) or 0
             pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", sigp, retain=False)
             try:
