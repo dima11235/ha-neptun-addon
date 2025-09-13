@@ -531,7 +531,7 @@ def ensure_discovery(mac):
         "payload_on": "on",
         "payload_off": "off",
         "qos": 0,
-        "retain": False,
+        "retain": True,
         "icon": "mdi:water-circle",
         "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/attributes/dry_flag",
         "device": device
