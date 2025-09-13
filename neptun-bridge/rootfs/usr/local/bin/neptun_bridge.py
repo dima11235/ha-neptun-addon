@@ -631,6 +631,7 @@ def ensure_discovery(mac):
             "payload_on": "on",
             "payload_off": "off",
             "device_class": "moisture",
+            "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/lines_status/line_{i}/attributes",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/binary_sensor/{wired_id}/config", wired_conf, retain=True)
@@ -1039,6 +1040,10 @@ def publish_system(mac_from_topic, buf: bytes):
             wireless_same_zone = ((i+1) in wireless_leaks)
             stv = "on" if (is_sensor_line and wired_active and not wireless_same_zone) else "off"
             pub(f"{base}/lines_status/line_{i+1}", stv, retain=False)
+            try:
+                pub(f"{base}/lines_status/line_{i+1}/attributes", {"icon_color": icon_color("leak", stv)}, retain=False)
+            except Exception:
+                pass
 
     # Do not publish duplicate line input types under base/lines_in/*.
     # Kept only settings/lines_in/{k} publishes above for a single source of truth.
