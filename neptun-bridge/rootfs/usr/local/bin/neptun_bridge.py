@@ -317,11 +317,11 @@ def icon_name(kind: str, value) -> str:
             return "mdi:battery-alert" if v in ("yes", "on", "1", "true") else "mdi:battery"
         if k == "signal":
             x = int(float(value))
-            if x <= 0: return "mdi:wifi-off"
-            if x <= 25: return "mdi:wifi-strength-1"
-            if x <= 50: return "mdi:wifi-strength-2"
-            if x <= 75: return "mdi:wifi-strength-3"
-            return "mdi:wifi-strength-4"
+            if x <= 0: return "mdi:signal-off"
+            if x <= 25: return "mdi:signal-cellular-outline"
+            if x <= 50: return "mdi:signal-cellular-1"
+            if x <= 75: return "mdi:signal-cellular-2"
+            return "mdi:signal-cellular-3"
         if k == "status_text":
             return "mdi:check-circle-outline" if str(value).strip().upper() == "NORMAL" else "mdi:alert-circle-outline"
     except Exception:
@@ -639,7 +639,7 @@ def ensure_discovery(mac):
         "state_topic": f"{TOPIC_PREFIX}/{mac}/signal_level",
         "unit_of_measurement": "%",
         "state_class": "measurement",
-        "icon": "mdi:wifi",
+        #"icon": "mdi:wifi",
         "entity_category": "diagnostic",
         "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/attributes/module_rssi",
         "device": device
@@ -932,7 +932,7 @@ def publish_system(mac_from_topic, buf: bytes):
             "unique_id": obj_id,
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/signal_level",
             "unit_of_measurement": "%",
-            "icon": "mdi:signal",
+            #"icon": "mdi:signal",
             "entity_category": "diagnostic",
             "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attributes/signal",
             "device": device
