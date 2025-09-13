@@ -250,6 +250,10 @@ last_seen = {}        # per-MAC last host timestamp of incoming device frame
 last_dev_epoch = {}   # per-MAC last device epoch seen in TLV 0x44
 module_lost_timeout = {}  # per-MAC timeout seconds for module_lost (fallback MODULE_LOST_DEFAULT)
 
+# Lightweight retry control for applying settings when device is busy or lags
+MAX_RETRIES = 3
+RETRY_DELAY_SEC = 2
+
 def log(*a):
     if DEBUG: print("[BRIDGE]", *a, file=sys.stderr)
 
@@ -1376,6 +1380,46 @@ def compose_settings_frame(open_valve: bool, dry=False, close_on_offline=False, 
     crc = crc16_ccitt(body)
     return bytes(body + struct.pack(">H", crc))
 
+# Publish a settings frame to cloud for a given MAC using current cache defaults.
+def publish_settings(mac: str, *, open_valve=None, dry=None, close_on_offline=None) -> bool:
+    st = state_cache.get(mac, {})
+    try:
+        ov = bool(st.get("valve_open", False)) if open_valve is None else bool(open_valve)
+        df = bool(st.get("dry_flag", False)) if dry is None else bool(dry)
+        cf = bool(st.get("flag_cl_valve", False)) if close_on_offline is None else bool(close_on_offline)
+        lc = int(st.get("line_in_cfg", 0))
+    except Exception:
+        ov = bool(open_valve) if open_valve is not None else False
+        df = bool(dry) if dry is not None else False
+        cf = bool(close_on_offline) if close_on_offline is not None else False
+        lc = 0
+
+    frame = compose_settings_frame(open_valve=ov, dry=df, close_on_offline=cf, line_cfg=lc)
+    pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
+    if not pref:
+        log("No cloud prefix known for", mac, ", waiting for incoming frame to learn it")
+        return False
+    try:
+        client.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
+        return True
+    except Exception:
+        return False
+
+def _retry_apply_dry_flag(mac: str, want_on: bool):
+    # Retry a few times if device does not reflect dry_flag state yet
+    for i in range(MAX_RETRIES):
+        try:
+            cur = bool(state_cache.get(mac, {}).get("dry_flag", False))
+        except Exception:
+            cur = None
+        if cur == want_on:
+            return
+        time.sleep(RETRY_DELAY_SEC)
+        ok = publish_settings(mac, dry=want_on)
+        if not ok:
+            # If we still don't know prefix, break early
+            break
+
 # [BRIDGE DOC] Subscribe to upstream `<prefix>/+/from` and local `neptun/+/cmd/#`.
 def on_connect(c, userdata, flags, rc):
     log("MQTT connected", rc)
@@ -1505,18 +1549,10 @@ def on_message(c, userdata, msg):
                 pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
                 up = pl.upper()
                 want_on = up in ("1","ON","OPEN","TRUE","YES") or pl.lower() == "on"
-                st = state_cache.get(mac, {})
-                frame = compose_settings_frame(
-                    open_valve=bool(st.get("valve_open", False)),
-                    dry=want_on,
-                    close_on_offline=bool(st.get("flag_cl_valve", False)),
-                    line_cfg=int(st.get("line_in_cfg", 0))
-                )
-                pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
-                if not pref:
-                    log("No cloud prefix known for", mac, ", waiting for incoming frame to learn it")
+                # Publish settings with desired dry flag
+                ok = publish_settings(mac, dry=want_on)
+                if not ok:
                     return
-                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log("CMD dry_flag ->", mac, "on" if want_on else "off")
 
                 # Optimistic local state update to avoid HA UI reverting
@@ -1532,6 +1568,11 @@ def on_message(c, userdata, msg):
                         {"icon_color": icon_color("floor_wash", ("on" if want_on else "off"))},
                         retain=False,
                     )
+                except Exception:
+                    pass
+                # Kick off a background retry if device state doesn't change
+                try:
+                    threading.Thread(target=_retry_apply_dry_flag, args=(mac, want_on), daemon=True).start()
                 except Exception:
                     pass
 
