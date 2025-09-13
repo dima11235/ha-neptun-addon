@@ -1545,10 +1545,7 @@ def on_message(c, userdata, msg):
                 if not ok:
                     return
                 log("CMD valve ->", mac, "open" if want_open else "close")
-                # Optimistic local state update for HA switch UX
-                st = state_cache.get(mac, {})
-                st["valve_open"] = want_open
-                state_cache[mac] = st
+                # Do not mutate cached device state; wait for a device frame
                 base = f"{TOPIC_PREFIX}/{mac}"
                 pub(f"{base}/state/valve_open", "1" if want_open else "0", retain=False)
                 try:
@@ -1573,9 +1570,7 @@ def on_message(c, userdata, msg):
                     return
                 log("CMD dry_flag ->", mac, "on" if want_on else "off")
 
-                # Optimistic local state update to avoid HA UI reverting
-                st["dry_flag"] = want_on
-                state_cache[mac] = st
+                # Do not mutate cache; wait for device to confirm
                 base = f"{TOPIC_PREFIX}/{mac}"
                 pub(f"{base}/settings/dry_flag", "on" if want_on else "off", retain=True)
                 # Mirror also status/dry_flag for consistency
@@ -1609,10 +1604,7 @@ def on_message(c, userdata, msg):
                 # c.publish removed; handled by publish_settings above
                 log("CMD close_on_offline ->", mac, "on" if want_on else "off")
 
-                # Optimistic local state update
-                st = state_cache.get(mac, {})
-                st["flag_cl_valve"] = want_on
-                state_cache[mac] = st
+                # Do not mutate cache; wait for device confirmation
                 base = f"{TOPIC_PREFIX}/{mac}"
                 pub(f"{base}/settings/close_valve_flag", "close" if want_on else "open", retain=True)
                 try:
