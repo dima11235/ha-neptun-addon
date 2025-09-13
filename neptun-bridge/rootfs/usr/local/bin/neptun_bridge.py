@@ -253,6 +253,44 @@ module_lost_timeout = {}  # per-MAC timeout seconds for module_lost (fallback MO
 def log(*a):
     if DEBUG: print("[BRIDGE]", *a, file=sys.stderr)
 
+# Compute a simple icon color name for UI cards that read attributes.
+# Note: Home Assistant core does not use this attribute, but custom cards
+# (e.g., button-card, some Mushroom templates) can consume it.
+def icon_color(kind: str, value) -> str:
+    try:
+        k = (kind or "").lower()
+        if k in ("leak", "problem", "module_lost", "sensors_lost", "module_alert"):
+            # value may be on/off, yes/no, 1/0, True/False
+            v = str(value).strip().lower()
+            is_on = v in ("on", "yes", "1", "true", "problem", "closed")
+            return "red" if is_on else "green"
+        if k == "valve_closed":
+            # Here value is valve_open ("1" open/"0" closed). Closed -> red
+            v = str(value).strip()
+            return "red" if v == "0" else "green"
+        if k == "battery_percent":
+            x = int(float(value))
+            if x < 15: return "red"
+            if x < 35: return "orange"
+            if x < 60: return "yellow"
+            return "green"
+        if k == "battery_flag":
+            v = str(value).strip().lower()
+            return "red" if v in ("yes", "on", "1", "true") else "green"
+        if k == "signal":
+            x = int(float(value))
+            if x < 25: return "red"
+            if x < 50: return "orange"
+            if x < 75: return "yellow"
+            return "green"
+        if k == "status_text":
+            return "green" if str(value).strip().upper() == "NORMAL" else "orange"
+        if k == "counter":
+            return "blue"
+    except Exception:
+        pass
+    return "grey"
+
 # [BRIDGE DOC] Publish wrapper: JSON-encode dicts, apply retain default, debug logging.
 def pub(topic, payload, retain=None, qos=0):
     if retain is None: retain = RETAIN_DEFAULT
@@ -621,6 +659,7 @@ def ensure_discovery(mac):
         "payload_on": "on",
         "payload_off": "off",
         "device_class": "moisture",
+        "json_attributes_topic": f"{base_topic}/attributes/leak_detected",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{leak_id}/config", leak_conf, retain=True)
@@ -632,6 +671,7 @@ def ensure_discovery(mac):
         "unique_id": mod_status_id,
         "state_topic": f"{base_topic}/state/status_name",
         "icon": "mdi:alert-circle-outline",
+        "json_attributes_topic": f"{base_topic}/attributes/module_status",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/sensor/{mod_status_id}/config", mod_status_conf, retain=True)
@@ -645,6 +685,7 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "problem",
+        "json_attributes_topic": f"{base_topic}/attributes/module_alert",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_alert_id}/config", mod_alert_conf, retain=True)
@@ -659,6 +700,7 @@ def ensure_discovery(mac):
         "payload_off": "1",
         "device_class": "problem",
         "icon": "mdi:water-pump-off",
+        "json_attributes_topic": f"{base_topic}/attributes/valve_closed",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{valve_closed_id}/config", valve_closed_conf, retain=True)
@@ -672,6 +714,7 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "battery",
+        "json_attributes_topic": f"{base_topic}/attributes/module_battery",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_batt_id}/config", mod_batt_conf, retain=True)
@@ -685,6 +728,7 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "battery",
+        "json_attributes_topic": f"{base_topic}/attributes/sensors_battery",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_batt_id}/config", sens_batt_conf, retain=True)
@@ -699,6 +743,7 @@ def ensure_discovery(mac):
         "payload_off": "no",
         "device_class": "problem",
         "icon": "mdi:wifi-off",
+        "json_attributes_topic": f"{base_topic}/attributes/sensors_lost",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_lost_id}/config", sens_lost_conf, retain=True)
@@ -713,6 +758,7 @@ def ensure_discovery(mac):
         "payload_off": "no",
         "device_class": "problem",
         "icon": "mdi:cloud-off-outline",
+        "json_attributes_topic": f"{base_topic}/attributes/module_lost",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_lost_id}/config", mod_lost_conf, retain=True)
@@ -796,9 +842,23 @@ def publish_system(mac_from_topic, buf: bytes):
         if nb is not None:
             entry["battery"] = nb
             pub(f"{base}/sensors_status/{s['sensor_id']}/battery", nb, retain=False)
+            try:
+                pub(f"{base}/sensors_status/{s['sensor_id']}/attributes/battery", {"icon_color": icon_color("battery_percent", nb)}, retain=False)
+            except Exception:
+                pass
         sensors_status.append(entry)
-        pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", rssi_bars_to_percent(s.get("signal_level", 0)) or 0, retain=False)
-        pub(f"{base}/sensors_status/{s['sensor_id']}/attention", 1 if s["leak"] else 0, retain=False)
+        sigp = rssi_bars_to_percent(s.get("signal_level", 0)) or 0
+        pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", sigp, retain=False)
+        try:
+            pub(f"{base}/sensors_status/{s['sensor_id']}/attributes/signal", {"icon_color": icon_color("signal", sigp)}, retain=False)
+        except Exception:
+            pass
+        att = 1 if s["leak"] else 0
+        pub(f"{base}/sensors_status/{s['sensor_id']}/attention", att, retain=False)
+        try:
+            pub(f"{base}/sensors_status/{s['sensor_id']}/attributes/leak", {"icon_color": icon_color("leak", att)}, retain=False)
+        except Exception:
+            pass
              
         obj_id = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_leak"
         conf = {
@@ -807,6 +867,7 @@ def publish_system(mac_from_topic, buf: bytes):
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attention",
             "payload_on": "1", "payload_off": "0",
             "device_class": "moisture",
+            "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attributes/leak",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/binary_sensor/{obj_id}/config", conf, retain=True)
@@ -818,6 +879,7 @@ def publish_system(mac_from_topic, buf: bytes):
             "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/battery",
             "unit_of_measurement": "%",
             "device_class": "battery",
+            "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attributes/battery",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf, retain=True)
@@ -830,6 +892,7 @@ def publish_system(mac_from_topic, buf: bytes):
             "unit_of_measurement": "%",
             "icon": "mdi:signal",
             "entity_category": "diagnostic",
+            "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attributes/signal",
             "device": device
         }
         pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf, retain=True)
@@ -856,11 +919,31 @@ def publish_system(mac_from_topic, buf: bytes):
     }
     
     pub(f"{base}/settings/status/alert", settings["status"]["alert"], retain=True)
+    try:
+        pub(f"{base}/attributes/leak_detected", {"icon_color": icon_color("leak", settings["status"]["alert"])}, retain=False)
+    except Exception:
+        pass
     pub(f"{base}/settings/status/dry_flag", settings["status"]["dry_flag"], retain=True)
     pub(f"{base}/settings/status/sensors_lost", settings["status"]["sensors_lost"], retain=True)
+    try:
+        pub(f"{base}/attributes/sensors_lost", {"icon_color": icon_color("sensors_lost", settings["status"]["sensors_lost"])}, retain=False)
+    except Exception:
+        pass
     pub(f"{base}/settings/status/battery_discharge_in_module", settings["status"]["battery_discharge_in_module"], retain=True)
+    try:
+        pub(f"{base}/attributes/module_battery", {"icon_color": icon_color("battery_flag", settings["status"]["battery_discharge_in_module"])}, retain=False)
+    except Exception:
+        pass
     pub(f"{base}/settings/status/battery_discharge_in_sensor", settings["status"]["battery_discharge_in_sensor"], retain=True)
+    try:
+        pub(f"{base}/attributes/sensors_battery", {"icon_color": icon_color("battery_flag", settings["status"]["battery_discharge_in_sensor"])}, retain=False)
+    except Exception:
+        pass
     pub(f"{base}/settings/status/module_alert", settings["status"]["module_alert"], retain=True)
+    try:
+        pub(f"{base}/attributes/module_alert", {"icon_color": icon_color("module_alert", settings["status"]["module_alert"])}, retain=False)
+    except Exception:
+        pass
     pub(f"{base}/settings/dry_flag", settings["dry_flag"], retain=True)
     pub(f"{base}/settings/relay_count", settings["relay_count"], retain=True)
     pub(f"{base}/settings/sensors_count", settings["sensors_count"], retain=True)
@@ -962,9 +1045,20 @@ def publish_system(mac_from_topic, buf: bytes):
 
     # state/*
     pub(f"{base}/state/json", st, retain=False)
-    if "valve_open" in st: pub(f"{base}/state/valve_open", "1" if st["valve_open"] else "0", retain=False)
+    if "valve_open" in st:
+        v = "1" if st["valve_open"] else "0"
+        pub(f"{base}/state/valve_open", v, retain=False)
+        try:
+            pub(f"{base}/attributes/valve_closed", {"icon_color": icon_color("valve_closed", v)}, retain=False)
+        except Exception:
+            pass
     if "status" in st: pub(f"{base}/state/status", st["status"], retain=False)
-    if "status_name" in st and st["status_name"]: pub(f"{base}/state/status_name", st["status_name"], retain=False)
+    if "status_name" in st and st["status_name"]:
+        pub(f"{base}/state/status_name", st["status_name"], retain=False)
+        try:
+            pub(f"{base}/attributes/module_status", {"icon_color": icon_color("status_text", st["status_name"])}, retain=False)
+        except Exception:
+            pass
 
 # [BRIDGE DOC] Handle 0x53: publish per-sensor battery, signal and attention flag.
 def publish_sensor_state(mac_from_topic, buf: bytes):
@@ -994,8 +1088,22 @@ def publish_sensor_state(mac_from_topic, buf: bytes):
             if nb is not None:
                 e["battery"] = nb
                 pub(f"{base}/sensors_status/{s['sensor_id']}/battery", nb, retain=False)
-            pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", rssi_bars_to_percent(s.get("signal_level", 0)) or 0, retain=False)
-            pub(f"{base}/sensors_status/{s['sensor_id']}/attention", 1 if s["leak"] else 0, retain=False)
+                try:
+                    pub(f"{base}/sensors_status/{s['sensor_id']}/attributes/battery", {"icon_color": icon_color("battery_percent", nb)}, retain=False)
+                except Exception:
+                    pass
+            sigp = rssi_bars_to_percent(s.get("signal_level", 0)) or 0
+            pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", sigp, retain=False)
+            try:
+                pub(f"{base}/sensors_status/{s['sensor_id']}/attributes/signal", {"icon_color": icon_color("signal", sigp)}, retain=False)
+            except Exception:
+                pass
+            att = 1 if s["leak"] else 0
+            pub(f"{base}/sensors_status/{s['sensor_id']}/attention", att, retain=False)
+            try:
+                pub(f"{base}/sensors_status/{s['sensor_id']}/attributes/leak", {"icon_color": icon_color("leak", att)}, retain=False)
+            except Exception:
+                pass
             slim.append(e)
         pub(f"{base}/sensors_status/json", slim, retain=False)
 
@@ -1380,7 +1488,12 @@ def main():
                             timeout = MODULE_LOST_DEFAULT
                         lost = (now - last) > timeout
                         base = f"{TOPIC_PREFIX}/{mac}"
-                        pub(f"{base}/settings/status/module_lost", "yes" if lost else "no", retain=True)
+                        val = "yes" if lost else "no"
+                        pub(f"{base}/settings/status/module_lost", val, retain=True)
+                        try:
+                            pub(f"{base}/attributes/module_lost", {"icon_color": icon_color("module_lost", val)}, retain=False)
+                        except Exception:
+                            pass
                     except Exception:
                         continue
             except Exception:
