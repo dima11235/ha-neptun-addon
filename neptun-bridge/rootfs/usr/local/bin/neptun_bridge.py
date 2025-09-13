@@ -1540,27 +1540,13 @@ def on_message(c, userdata, msg):
                 
                 pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip().upper()
                 want_open = pl in ("1","ON","OPEN","TRUE")
-                st = state_cache.get(mac, {})
-                frame = compose_settings_frame(
-                    open_valve=want_open,
-                    dry=bool(st.get("dry_flag", False)),
-                    close_on_offline=bool(st.get("flag_cl_valve", False)),
-                    line_cfg=int(st.get("line_in_cfg", 0))
-                )
-                
-                if CLOUD_PREFIX:
-                    pref = CLOUD_PREFIX
-                else:
-                    try:
-                        pref = mac_to_prefix.get(mac, "")
-                    except Exception:
-                        pref = ""
-                if not pref:
-                    log("No cloud prefix known for", mac, ", waiting for incoming frame to learn it")
+                # Unified publish via helper to preserve other flags
+                ok = publish_settings(mac, open_valve=want_open)
+                if not ok:
                     return
-                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
                 log("CMD valve ->", mac, "open" if want_open else "close")
                 # Optimistic local state update for HA switch UX
+                st = state_cache.get(mac, {})
                 st["valve_open"] = want_open
                 state_cache[mac] = st
                 base = f"{TOPIC_PREFIX}/{mac}"
@@ -1613,20 +1599,18 @@ def on_message(c, userdata, msg):
                 up = pl.upper()
                 want_on = up in ("1","ON","CLOSE","TRUE","YES") or pl.lower() in ("on","close")
                 st = state_cache.get(mac, {})
-                frame = compose_settings_frame(
-                    open_valve=bool(st.get("valve_open", False)),
-                    dry=bool(st.get("dry_flag", False)),
-                    close_on_offline=want_on,
-                    line_cfg=int(st.get("line_in_cfg", 0))
-                )
-                pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
-                if not pref:
+                ok = publish_settings(mac, close_on_offline=want_on)
+                if not ok:
+                    return
+                pref = None  # replaced by publish_settings
+                if False and not pref:
                     log("No cloud prefix known for", mac, "‚ waiting for incoming frame to learn it")
                     return
-                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
+                # c.publish removed; handled by publish_settings above
                 log("CMD close_on_offline ->", mac, "on" if want_on else "off")
 
                 # Optimistic local state update
+                st = state_cache.get(mac, {})
                 st["flag_cl_valve"] = want_on
                 state_cache[mac] = st
                 base = f"{TOPIC_PREFIX}/{mac}"
