@@ -273,6 +273,16 @@ def icon_color(kind: str, value) -> str:
             # Here value is valve_open ("1" open/"0" closed). Closed -> red
             v = str(value).strip()
             return "var(--red-color)" if v == "0" else "var(--green-color)"
+        if k == "valve_switch":
+            # Switch entity for valve: ON/open -> green, OFF/closed -> orange
+            v = str(value).strip().lower()
+            is_on = v in ("1", "on", "open", "true")
+            return "var(--green-color)" if is_on else "var(--orange-color)"
+        if k in ("dry_mode", "floor_wash"):
+            # Floor Wash switch: ON -> orange, OFF -> green
+            v = str(value).strip().lower()
+            is_on = v in ("1", "on", "true", "yes")
+            return "var(--orange-color)" if is_on else "var(--green-color)"
         if k == "battery_percent":
             x = int(float(value))
             if x < 15: return "var(--red-color)"
@@ -496,6 +506,7 @@ def ensure_discovery(mac):
         "payload_on": "1",
         "payload_off": "0",
         "icon": "mdi:valve",
+        "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/attributes/valve_switch",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/switch/{sw_valve_id}/config", sw_valve_conf, retain=True)
@@ -522,6 +533,7 @@ def ensure_discovery(mac):
         "qos": 0,
         "retain": False,
         "icon": "mdi:water-circle",
+        "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/attributes/dry_flag",
         "device": device
     }
     pub(f"{DISCOVERY_PRE}/switch/{obj_id2}/config", conf2, retain=True)
@@ -1075,6 +1087,14 @@ def publish_system(mac_from_topic, buf: bytes):
     except Exception:
         pass
     pub(f"{base}/settings/dry_flag", settings["dry_flag"], retain=True)
+    try:
+        pub(
+            f"{base}/attributes/dry_flag",
+            {"icon_color": icon_color("floor_wash", settings["dry_flag"])},
+            retain=False,
+        )
+    except Exception:
+        pass
     pub(f"{base}/settings/relay_count", settings["relay_count"], retain=True)
     pub(f"{base}/settings/sensors_count", settings["sensors_count"], retain=True)
     pub(f"{base}/settings/valve_settings", settings["valve_settings"], retain=True)
@@ -1222,6 +1242,14 @@ def publish_system(mac_from_topic, buf: bytes):
             pub(
                 f"{base}/attributes/valve_closed",
                 {"icon_color": icon_color("valve_closed", v), "icon": icon_name("valve_closed", v)},
+                retain=False,
+            )
+        except Exception:
+            pass
+        try:
+            pub(
+                f"{base}/attributes/valve_switch",
+                {"icon_color": icon_color("valve_switch", v)},
                 retain=False,
             )
         except Exception:
@@ -1463,6 +1491,14 @@ def on_message(c, userdata, msg):
                 state_cache[mac] = st
                 base = f"{TOPIC_PREFIX}/{mac}"
                 pub(f"{base}/state/valve_open", "1" if want_open else "0", retain=False)
+                try:
+                    pub(
+                        f"{base}/attributes/valve_switch",
+                        {"icon_color": icon_color("valve_switch", ("1" if want_open else "0"))},
+                        retain=False,
+                    )
+                except Exception:
+                    pass
             elif cmd[:1] == ["dry_flag"]:
                 pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
                 up = pl.upper()
@@ -1488,6 +1524,14 @@ def on_message(c, userdata, msg):
                 pub(f"{base}/settings/dry_flag", "on" if want_on else "off", retain=True)
                 # Mirror also status/dry_flag for consistency
                 pub(f"{base}/settings/status/dry_flag", "yes" if want_on else "no", retain=True)
+                try:
+                    pub(
+                        f"{base}/attributes/dry_flag",
+                        {"icon_color": icon_color("floor_wash", ("on" if want_on else "off"))},
+                        retain=False,
+                    )
+                except Exception:
+                    pass
 
             elif cmd[:1] == ["close_on_offline"]:
                 pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
