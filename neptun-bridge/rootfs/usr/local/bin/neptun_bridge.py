@@ -506,6 +506,8 @@ def ensure_discovery(mac):
         "payload_on": "1",
         "payload_off": "0",
         "icon": "mdi:valve",
+        "qos": 0,
+        "retain": True,
         "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/attributes/valve_switch",
         "device": device
     }
@@ -548,7 +550,7 @@ def ensure_discovery(mac):
         "payload_on": "close",
         "payload_off": "open",
         "qos": 0,
-        "retain": False,
+        "retain": True,
         "icon": "mdi:water-alert-outline",
         "entity_category": "config",
         "device": device
