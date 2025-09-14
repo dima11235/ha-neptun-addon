@@ -1,5 +1,5 @@
 name: "Neptun ProW+WiFi Local Bridge (Home Assistant add-on)"
-version: "0.1.102"
+version: "0.1.103"
 slug: neptun-bridge
 description: "Neptun ProW+WiFi Local Bridge (Home Assistant add-on)"
 url: "https://github.com/dima11235/ha-neptun-addon"

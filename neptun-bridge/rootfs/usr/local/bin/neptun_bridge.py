@@ -31,6 +31,7 @@ MODULE_LOST_DEFAULT = int(os.getenv("NB_MODULE_LOST_TIMEOUT", "300"))
 WATCHDOG_PERIOD = int(os.getenv("NB_WATCHDOG_PERIOD", "30"))
 if WATCHDOG_PERIOD < 5:
     WATCHDOG_PERIOD = 5
+PENDING_HOLD_SEC = int(os.getenv("NB_PENDING_HOLD_SEC", "60"))
 
 MQTT_HOST = "127.0.0.1"
 # Prefer NB_MQTT_PORT (from options), fallback to MQTT_LISTEN_PORT
@@ -248,6 +249,8 @@ announced = set() # discovery announced MACs
 mac_to_prefix = {}
 last_seen = {}        # per-MAC last host timestamp of incoming device frame
 last_dev_epoch = {}   # per-MAC last device epoch seen in TLV 0x44
+pending_valve = {}    # per-MAC desired valve state and timestamp {mac: {"desired": bool, "ts": float}}
+pending_dry = {}      # per-MAC desired dry_flag state and timestamp {mac: {"desired": bool, "ts": float}}
 module_lost_timeout = {}  # per-MAC timeout seconds for module_lost (fallback MODULE_LOST_DEFAULT)
 
 # Lightweight retry control for applying settings when device is busy or lags
@@ -1031,7 +1034,33 @@ def publish_system(mac_from_topic, buf: bytes):
         )
     except Exception:
         pass
-    pub(f"{base}/settings/status/dry_flag", settings["status"]["dry_flag"], retain=True)
+    # Anti-flicker for dry_flag: suppress contradictory publishes while a recent command is pending
+    allow_publish_dry = True
+    try:
+        pend = pending_dry.get(mac)
+        if pend:
+            age = time.time() - float(pend.get("ts", 0) or 0)
+            want_on = bool(pend.get("desired"))
+            dev_on = bool(st.get("dry_flag", False))
+            if age <= PENDING_HOLD_SEC:
+                if dev_on != want_on:
+                    allow_publish_dry = False
+                else:
+                    # Device reached desired state; clear pending
+                    try:
+                        pending_dry.pop(mac, None)
+                    except Exception:
+                        pass
+            else:
+                # Hold expired
+                try:
+                    pending_dry.pop(mac, None)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    if allow_publish_dry:
+        pub(f"{base}/settings/status/dry_flag", settings["status"]["dry_flag"], retain=True)
     pub(f"{base}/settings/status/sensors_lost", settings["status"]["sensors_lost"], retain=True)
     try:
         pub(
@@ -1092,13 +1121,15 @@ def publish_system(mac_from_topic, buf: bytes):
         )
     except Exception:
         pass
-    pub(f"{base}/settings/dry_flag", settings["dry_flag"], retain=True)
+    if allow_publish_dry:
+        pub(f"{base}/settings/dry_flag", settings["dry_flag"], retain=True)
     try:
-        pub(
-            f"{base}/attributes/dry_flag",
-            {"icon_color": icon_color("floor_wash", settings["dry_flag"])},
-            retain=False,
-        )
+        if allow_publish_dry:
+            pub(
+                f"{base}/attributes/dry_flag",
+                {"icon_color": icon_color("floor_wash", settings["dry_flag"])},
+                retain=False,
+            )
     except Exception:
         pass
     pub(f"{base}/settings/relay_count", settings["relay_count"], retain=True)
@@ -1243,44 +1274,74 @@ def publish_system(mac_from_topic, buf: bytes):
     pub(f"{base}/state/json", st, retain=False)
     if "valve_open" in st:
         v = "1" if st["valve_open"] else "0"
-        pub(f"{base}/state/valve_open", v, retain=False)
+        # If a valve command is in-flight and device still reports the old state,
+        # suppress publishing this contradictory value for a short hold window to avoid UI flicker.
+        allow_publish = True
         try:
-            pub(
-                f"{base}/attributes/valve_closed",
-                {"icon_color": icon_color("valve_closed", v), "icon": icon_name("valve_closed", v)},
-                retain=False,
-            )
+            pend = pending_valve.get(mac)
+            if pend:
+                age = time.time() - float(pend.get("ts", 0) or 0)
+                want_open = bool(pend.get("desired"))
+                dev_open = (v == "1")
+                if age <= PENDING_HOLD_SEC:
+                    if dev_open != want_open:
+                        allow_publish = False
+                    else:
+                        # Device reached desired state; clear pending
+                        try:
+                            pending_valve.pop(mac, None)
+                        except Exception:
+                            pass
+                else:
+                    # Hold expired
+                    try:
+                        pending_valve.pop(mac, None)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        if allow_publish:
+            pub(f"{base}/state/valve_open", v, retain=False)
+        try:
+            if allow_publish:
+                pub(
+                    f"{base}/attributes/valve_closed",
+                    {"icon_color": icon_color("valve_closed", v), "icon": icon_name("valve_closed", v)},
+                    retain=False,
+                )
         except Exception:
             pass
         try:
-            pub(
-                f"{base}/attributes/valve_switch",
-                {"icon_color": icon_color("valve_switch", v)},
-                retain=False,
-            )
+            if allow_publish:
+                pub(
+                    f"{base}/attributes/valve_switch",
+                    {"icon_color": icon_color("valve_switch", v)},
+                    retain=False,
+                )
         except Exception:
             pass
         # Republish discovery for valve_closed only when state bucket changes (open/closed)
         try:
-            bucket = ("open" if v == "1" else "closed")
-            prev_cache = state_cache.get(mac, {})
-            last_b = prev_cache.get("valve_state_bucket")
-            if bucket != last_b:
-                valve_closed_id = f"neptun_{safe_mac}_valve_closed"
-                valve_closed_conf = {
-                    "name": f"Valve Closed",
-                    "unique_id": valve_closed_id,
-                    "state_topic": f"{base}/state/valve_open",
-                    "payload_on": "0",
-                    "payload_off": "1",
-                    "device_class": "problem",
-                    "icon": icon_name("valve_closed", v),
-                    "json_attributes_topic": f"{base}/attributes/valve_closed",
-                    "device": device
-                }
-                pub(f"{DISCOVERY_PRE}/binary_sensor/{valve_closed_id}/config", valve_closed_conf, retain=True)
-                prev_cache["valve_state_bucket"] = bucket
-                state_cache[mac] = prev_cache
+            if allow_publish:
+                bucket = ("open" if v == "1" else "closed")
+                prev_cache = state_cache.get(mac, {})
+                last_b = prev_cache.get("valve_state_bucket")
+                if bucket != last_b:
+                    valve_closed_id = f"neptun_{safe_mac}_valve_closed"
+                    valve_closed_conf = {
+                        "name": f"Valve Closed",
+                        "unique_id": valve_closed_id,
+                        "state_topic": f"{base}/state/valve_open",
+                        "payload_on": "0",
+                        "payload_off": "1",
+                        "device_class": "problem",
+                        "icon": icon_name("valve_closed", v),
+                        "json_attributes_topic": f"{base}/attributes/valve_closed",
+                        "device": device
+                    }
+                    pub(f"{DISCOVERY_PRE}/binary_sensor/{valve_closed_id}/config", valve_closed_conf, retain=True)
+                    prev_cache["valve_state_bucket"] = bucket
+                    state_cache[mac] = prev_cache
         except Exception:
             pass
     if "status" in st: pub(f"{base}/state/status", st["status"], retain=False)
@@ -1644,6 +1705,11 @@ def on_message(c, userdata, msg):
                 
                 pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip().upper()
                 want_open = pl in ("1","ON","OPEN","TRUE")
+                # Mark command in-flight to suppress contradictory device state for a short window
+                try:
+                    pending_valve[mac] = {"desired": bool(want_open), "ts": time.time()}
+                except Exception:
+                    pass
                 # Unified publish via helper to preserve other flags
                 ok = publish_settings(mac, open_valve=want_open)
                 if not ok:
@@ -1668,6 +1734,11 @@ def on_message(c, userdata, msg):
                 pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
                 up = pl.upper()
                 want_on = up in ("1","ON","OPEN","TRUE","YES") or pl.lower() == "on"
+                # Mark command in-flight to suppress contradictory device state for a short window
+                try:
+                    pending_dry[mac] = {"desired": bool(want_on), "ts": time.time()}
+                except Exception:
+                    pass
                 # Publish settings with desired dry flag
                 ok = publish_settings(mac, dry=want_on)
                 if not ok:
