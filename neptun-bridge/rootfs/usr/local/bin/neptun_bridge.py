@@ -292,10 +292,9 @@ def icon_color(kind: str, value) -> str:
             return "var(--orange-color)" if is_on else "var(--green-color)"
         if k == "battery_percent":
             x = int(float(value))
-            if x < 15: return "var(--red-color)"
-            if x < 35: return "var(--orange-color)"
-            if x < 60: return "var(--yellow-color)"
-            return "var(--green-color)"
+            if x <= 29: return "var(--state-sensor-battery-low-color)"
+            if x <= 69: return "var(--state-sensor-battery-medium-color)"
+            return "var(--state-sensor-battery-high-color)"
         if k == "battery_flag":
             v = str(value).strip().lower()
             return "var(--red-color)" if v in ("yes", "on", "1", "true") else "var(--green-color)"
