@@ -137,6 +137,152 @@ def rssi_bars_to_percent(v):
     if x > 4: x = 4
     return x * 25
 
+def wireless_sensor_id(sensor) -> int:
+    """Best-effort conversion of sensor id/line field to int."""
+    if isinstance(sensor, dict):
+        candidate = sensor.get("sensor_id")
+        if candidate is None:
+            candidate = sensor.get("line")
+    else:
+        candidate = sensor
+    try:
+        return int(candidate)
+    except Exception:
+        try:
+            return int(float(candidate))
+        except Exception:
+            return 0
+
+
+def describe_wireless_sensor(sensor: dict) -> dict:
+    """Return normalized values for a wireless sensor payload."""
+    sensor_id = wireless_sensor_id(sensor)
+    container = sensor if isinstance(sensor, dict) else {}
+    if not container:
+        container = {}
+    leak_flag = bool(container.get("leak"))
+    attention = 1 if leak_flag else 0
+    signal_percent = rssi_bars_to_percent(container.get("signal_level", 0)) or 0
+    battery = normalize_battery(container.get("battery_percent", 0))
+    return {
+        "sensor_id": sensor_id,
+        "attention": attention,
+        "signal_percent": signal_percent,
+        "battery": battery,
+        "leak": leak_flag,
+    }
+
+
+def wireless_sensor_status_entry(snapshot: dict) -> dict:
+    """Build sensors_status payload chunk for JSON topics."""
+    entry = {
+        "line": snapshot["sensor_id"],
+        "attention": snapshot["attention"],
+        "signal_level": snapshot["signal_percent"],
+    }
+    if snapshot.get("battery") is not None:
+        entry["battery"] = snapshot["battery"]
+    return entry
+
+
+def publish_wireless_sensor_metrics(base: str, snapshot: dict):
+    """Publish MQTT topics for battery, signal and leak metrics."""
+    sensor_id = snapshot["sensor_id"]
+    topics_base = f"{base}/sensors_status/{sensor_id}"
+
+    battery = snapshot.get("battery")
+    if battery is not None:
+        pub(f"{topics_base}/battery", battery, retain=False)
+        try:
+            pub(
+                f"{topics_base}/attributes/battery",
+                {"icon_color": icon_color("battery_percent", battery)},
+                retain=False,
+            )
+        except Exception:
+            pass
+
+    signal_percent = snapshot["signal_percent"]
+    pub(f"{topics_base}/signal_level", signal_percent, retain=False)
+    try:
+        pub(
+            f"{topics_base}/attributes/signal",
+            {"icon_color": icon_color("signal", signal_percent), "icon": icon_name("signal", signal_percent)},
+            retain=False,
+        )
+    except Exception:
+        pass
+
+    attention = snapshot["attention"]
+    pub(f"{topics_base}/attention", attention, retain=False)
+    try:
+        pub(
+            f"{topics_base}/attributes/leak",
+            {"icon_color": icon_color("leak", attention), "icon": icon_name("leak", attention)},
+            retain=False,
+        )
+    except Exception:
+        pass
+
+
+def publish_wireless_sensor_discovery(mac: str, safe_mac: str, device: dict, base: str, snapshot: dict):
+    """Publish Home Assistant discovery payloads for a wireless sensor."""
+    sensor_id = snapshot["sensor_id"]
+    topics_base = f"{base}/sensors_status/{sensor_id}"
+
+    leak_id = f"neptun_{safe_mac}_sensor_{sensor_id}_leak"
+    leak_conf = {
+        "name": f"Sensor {sensor_id} Leak",
+        "unique_id": leak_id,
+        "state_topic": f"{topics_base}/attention",
+        "payload_on": "1",
+        "payload_off": "0",
+        "device_class": "moisture",
+        "json_attributes_topic": f"{topics_base}/attributes/leak",
+        "device": device,
+    }
+    pub(f"{DISCOVERY_PRE}/binary_sensor/{leak_id}/config", leak_conf, retain=True)
+
+    battery_id = f"neptun_{safe_mac}_sensor_{sensor_id}_battery"
+    battery_conf = {
+        "name": f"Sensor {sensor_id} Battery",
+        "unique_id": battery_id,
+        "state_topic": f"{topics_base}/battery",
+        "unit_of_measurement": "%",
+        "device_class": "battery",
+        "json_attributes_topic": f"{topics_base}/attributes/battery",
+        "device": device,
+    }
+    pub(f"{DISCOVERY_PRE}/sensor/{battery_id}/config", battery_conf, retain=True)
+
+    signal_percent = snapshot["signal_percent"]
+    try:
+        bucket = signal_bucket(signal_percent)
+    except Exception:
+        bucket = None
+    try:
+        prev_cache = state_cache.get(mac, {})
+        buckets = prev_cache.get("sensor_rssi_bucket") or {}
+        last_bucket = buckets.get(sensor_id)
+        if bucket != last_bucket:
+            signal_id = f"neptun_{safe_mac}_sensor_{sensor_id}_signal_level"
+            signal_conf = {
+                "name": f"Sensor {sensor_id} RSSI",
+                "unique_id": signal_id,
+                "state_topic": f"{topics_base}/signal_level",
+                "unit_of_measurement": "%",
+                "icon": icon_name("signal", signal_percent),
+                "json_attributes_topic": f"{topics_base}/attributes/signal",
+                "device": device,
+            }
+            pub(f"{DISCOVERY_PRE}/sensor/{signal_id}/config", signal_conf, retain=True)
+            buckets[sensor_id] = bucket
+            prev_cache["sensor_rssi_bucket"] = buckets
+            state_cache[mac] = prev_cache
+    except Exception:
+        pass
+
+
 # Unified builder for Home Assistant device descriptor
 def make_device(mac: str):
     """Return (device_dict, safe_mac, dev_id) for consistent HA discovery.
@@ -911,97 +1057,11 @@ def publish_system(mac_from_topic, buf: bytes):
     state_cache[mac] = prev
     
     sensors_status = []
-    for s in st.get("wireless_sensors", []):
-        nb = normalize_battery(s.get("battery_percent", 0))
-        entry = {
-            "line": s["sensor_id"],
-            "attention": 1 if s["leak"] else 0,
-            "signal_level": rssi_bars_to_percent(s.get("signal_level", 0)) or 0
-        }
-        if nb is not None:
-            entry["battery"] = nb
-            pub(f"{base}/sensors_status/{s['sensor_id']}/battery", nb, retain=False)
-            try:
-                pub(
-                    f"{base}/sensors_status/{s['sensor_id']}/attributes/battery",
-                    {"icon_color": icon_color("battery_percent", nb)},
-                    retain=False,
-                )
-            except Exception:
-                pass
-        sensors_status.append(entry)
-        sigp = rssi_bars_to_percent(s.get("signal_level", 0)) or 0
-        pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", sigp, retain=False)
-        try:
-            pub(
-                f"{base}/sensors_status/{s['sensor_id']}/attributes/signal",
-                {"icon_color": icon_color("signal", sigp), "icon": icon_name("signal", sigp)},
-                retain=False,
-            )
-        except Exception:
-            pass
-        att = 1 if s["leak"] else 0
-        pub(f"{base}/sensors_status/{s['sensor_id']}/attention", att, retain=False)
-        try:
-            pub(
-                f"{base}/sensors_status/{s['sensor_id']}/attributes/leak",
-                {"icon_color": icon_color("leak", att), "icon": icon_name("leak", att)},
-                retain=False,
-            )
-        except Exception:
-            pass
-             
-        obj_id = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_leak"
-        conf = {
-            "name": f"Sensor {s['sensor_id']} Leak",
-            "unique_id": obj_id,
-            "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attention",
-            "payload_on": "1", "payload_off": "0",
-            "device_class": "moisture",
-            "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attributes/leak",
-            "device": device
-        }
-        pub(f"{DISCOVERY_PRE}/binary_sensor/{obj_id}/config", conf, retain=True)
-
-        obj_id = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_battery"
-        conf = {
-            "name": f"Sensor {s['sensor_id']} Battery",
-            "unique_id": obj_id,
-            "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/battery",
-            "unit_of_measurement": "%",
-            "device_class": "battery",
-            "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attributes/battery",
-            "device": device
-        }
-        pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf, retain=True)
-
-        obj_id = f"neptun_{safe_mac}_sensor_{s['sensor_id']}_signal_level"
-        # Republish discovery only when RSSI bucket changes
-        try:
-            sb = signal_bucket(sigp)
-        except Exception:
-            sb = None
-        try:
-            prev_cache = state_cache.get(mac, {})
-            by_id = prev_cache.get("sensor_rssi_bucket") or {}
-            last_sb = by_id.get(int(s['sensor_id']))
-            if sb != last_sb:
-                conf = {
-                    "name": f"Sensor {s['sensor_id']} RSSI",
-                    "unique_id": obj_id,
-                    "state_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/signal_level",
-                    "unit_of_measurement": "%",
-                    "icon": icon_name("signal", sigp),
-                    "entity_category": "diagnostic",
-                    "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/sensors_status/{s['sensor_id']}/attributes/signal",
-                    "device": device
-                }
-                pub(f"{DISCOVERY_PRE}/sensor/{obj_id}/config", conf, retain=True)
-                by_id[int(s['sensor_id'])] = sb
-                prev_cache["sensor_rssi_bucket"] = by_id
-                state_cache[mac] = prev_cache
-        except Exception:
-            pass
+    for raw_sensor in st.get("wireless_sensors", []):
+        snapshot = describe_wireless_sensor(raw_sensor)
+        sensors_status.append(wireless_sensor_status_entry(snapshot))
+        publish_wireless_sensor_metrics(base, snapshot)
+        publish_wireless_sensor_discovery(mac, safe_mac, device, base, snapshot)
 
     if sensors_status:
         pub(f"{base}/sensors_status/json", sensors_status, retain=False)
@@ -1377,41 +1437,10 @@ def publish_sensor_state(mac_from_topic, buf: bytes):
         pass
     if sensors:
         slim = []
-        for s in sensors:
-            nb = normalize_battery(s.get("battery_percent", 0))
-            e = {"line": s["sensor_id"], "attention": 1 if s["leak"] else 0, "signal_level": rssi_bars_to_percent(s.get("signal_level", 0)) or 0}
-            if nb is not None:
-                e["battery"] = nb
-                pub(f"{base}/sensors_status/{s['sensor_id']}/battery", nb, retain=False)
-                try:
-                    pub(
-                        f"{base}/sensors_status/{s['sensor_id']}/attributes/battery",
-                        {"icon_color": icon_color("battery_percent", nb)},
-                        retain=False,
-                    )
-                except Exception:
-                    pass
-            sigp = rssi_bars_to_percent(s.get("signal_level", 0)) or 0
-            pub(f"{base}/sensors_status/{s['sensor_id']}/signal_level", sigp, retain=False)
-            try:
-                pub(
-                    f"{base}/sensors_status/{s['sensor_id']}/attributes/signal",
-                    {"icon_color": icon_color("signal", sigp), "icon": icon_name("signal", sigp)},
-                    retain=False,
-                )
-            except Exception:
-                pass
-            att = 1 if s["leak"] else 0
-            pub(f"{base}/sensors_status/{s['sensor_id']}/attention", att, retain=False)
-            try:
-                pub(
-                    f"{base}/sensors_status/{s['sensor_id']}/attributes/leak",
-                    {"icon_color": icon_color("leak", att), "icon": icon_name("leak", att)},
-                    retain=False,
-                )
-            except Exception:
-                pass
-            slim.append(e)
+        for raw_sensor in sensors:
+            snapshot = describe_wireless_sensor(raw_sensor)
+            slim.append(wireless_sensor_status_entry(snapshot))
+            publish_wireless_sensor_metrics(base, snapshot)
         pub(f"{base}/sensors_status/json", slim, retain=False)
 
 # [BRIDGE DOC] Build 0x57 settings frame (valve/dry/close_on_offline/line_cfg) with CRC.
