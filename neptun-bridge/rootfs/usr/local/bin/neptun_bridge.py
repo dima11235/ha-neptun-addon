@@ -825,7 +825,7 @@ def ensure_discovery(mac):
         "unit_of_measurement": "%",
         "state_class": "measurement",
         #"icon": "mdi:wifi",
-        "entity_category": "diagnostic",
+        #"entity_category": "diagnostic",
         "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/attributes/module_rssi",
         "device": device
     }
