@@ -1,22 +1,70 @@
 ﻿# Neptun ProW+WiFi Local Bridge 0.2.0
 
-## Highlights
-- Home Assistant discovery now updates icons and colors dynamically for module status, leak sensors, valve state, RSSI buckets, and per-sensor batteries.
-- Reliability upgrades: Floor Wash, valve, and Close On Offline switches use retries with cached state handling and retain flags to avoid flicker and lost commands.
-- Wireless telemetry was refactored for cleaner parsing and publishing, keeping sensor topics consistent.
-- Line type and counter writes now reuse helpers to ensure consistent Home Assistant state updates.
-- Default pending-hold window for command retries increased to 60 seconds; tune with NB_PENDING_HOLD_SEC if required.
+## Что нового
+- Обновлённые discovery-пакеты с динамическими иконками и цветами (модуль, датчики протечки, RSSI, батареи, клапан).
+- Повторные отправки команд и окно ожидания (по умолчанию 60 секунд) для Floor Wash, клапана и Close On Offline.
+- Переработанная обработка телеметрии беспроводных датчиков и унифицированная запись Line Type/счётчиков.
+- Улучшенные retain-настройки, чтобы состояния не терялись после перезапуска Home Assistant.
 
-## Detailed Changes
-- Added icon_color/icon attributes for module, leak, valve, sensor RSSI, and per-sensor battery entities, plus runtime discovery refresh when values change.
-- Changed RSSI and signal icons to bucket-based variants that reflect strength accurately.
-- Published discovery for valve_closed, module_lost, and sensors_lost with dynamic icons and icon_color attributes.
-- Enabled retain flag on key switches so state survives Home Assistant restarts.
-- Introduced retry logic and helper consolidation for valve, Floor Wash, Close On Offline, line types, and counter updates to reduce state drift.
-- Added anti-flicker protection for valve and Floor Wash topics when devices echo data slowly.
-- Tweaked module alert coloring for better visibility.
+## Требования
+- Home Assistant OS или Supervisor с доступом к магазину дополнений.
+- MQTT-брокер Home Assistant (`core-mosquitto`) или другой доступный брокер.
+- Возможность перенаправить облачный адрес Neptun `185.76.147.189:1883` на локальный `IP_HA:2883` (NAT/redirect).
+- Учётные данные MQTT в `/config/secrets.yaml`, если брокер требует авторизацию.
 
-## Upgrade Notes
-- Restart the add-on after updating to reload the new discovery payloads.
-- If you override NB_PENDING_HOLD_SEC, check whether the new 60 second default suits your setup.
-- Allow a few minutes after upgrade for Home Assistant to refresh entity icons via discovery.
+## Установка
+1. Добавьте репозиторий `https://github.com/dima11235/ha-neptun-addon` в магазине дополнений.
+2. Установите и запустите **Neptun ProW+WiFi Local Bridge**.
+3. Заполните раздел «Конфигурация» и добавьте секреты в `/config/secrets.yaml`.
+4. Настройте NAT/redirect, чтобы модуль Neptun подключался к `IP_HA:2883` вместо SST Cloud.
+5. Проверьте лог и убедитесь, что сущности Neptun появились в Home Assistant.
+
+### Переадресация облака → аддон (NAT)
+- Облачный адрес: `185.76.147.189:1883`
+- Локальный адрес: `IP_HA:<listen_port>` (по умолчанию `2883`)
+
+Пример для Keenetic (CLI), где `192.168.1.200` — IP Home Assistant:
+```
+ip static tcp 185.76.147.189/32 1883 192.168.1.200 2883
+system configuration save
+```
+
+## Конфигурация
+```yaml
+mqtt:
+  listen_port: 2883
+  allow_anonymous: true
+  user: ""
+  password: ""
+ha_mqtt:
+  host: "core-mosquitto"
+  port: 1883
+  user: "!secret mqtt_username"
+  password: "!secret mqtt_password"
+bridge:
+  cloud_prefix: ""
+  topic_prefix: "neptun"
+  discovery_prefix: "homeassistant"
+  retain: true
+  debug: false
+```
+
+### Дополнительные переменные окружения
+- `NB_PENDING_HOLD_SEC` (по умолчанию 60) — окно ожидания подтверждения команд.
+- `NB_MODULE_LOST_TIMEOUT` (по умолчанию 300) — таймаут признания модуля «потерянным».
+- `NB_WATCHDOG_PERIOD` (по умолчанию 30) — период фонового мониторинга.
+- `NB_DEBUG` — подробный лог, `NB_RETAIN` — поведение retain по умолчанию.
+
+### Пример секретов (`/config/secrets.yaml`)
+```yaml
+mqtt_username: myuser
+mqtt_password: mypass
+```
+
+## Диагностика
+- Включите `debug: true`, чтобы видеть подробный лог подключения и разбор MQTT-кадров.
+- Используйте топики `neptun/<MAC>/raw/*` для анализа необработанных данных.
+- Если сущности не обновляются, проверьте правила NAT и доступ к `IP_HA:listen_port`.
+
+## Обратная связь
+Сообщайте об ошибках и предлагайте улучшения через Issues GitHub или присылайте Pull Request.
