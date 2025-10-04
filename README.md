@@ -1,4 +1,4 @@
-﻿# Neptun ProW+WiFi Local Bridge
+﻿## Neptun ProW+WiFi Local Bridge
 
 Локальный мост для системы Neptun ProW+WiFi в Home Assistant.
 Дополнение поднимает встроенный брокер Mosquitto, перехватывает соединение устройства и перенаправляет данные
@@ -30,6 +30,16 @@
 4. Настройте NAT/redirect на маршрутизаторе, чтобы устройство Neptun подключалось к `IP_HA:2883` вместо SST Cloud.
 5. Проверьте лог и убедитесь, что сущности Neptun появились в Home Assistant.
 
+Переадресация облака → аддон (NAT)
+- Облачный адрес: `185.76.147.189:1883`
+- Локальный: `IP_HA:<listen_port>` (по умолчанию `2883`)
+
+Keenetic (CLI), где `192.168.1.200` — IP HA:
+```
+ip static tcp 185.76.147.189/32 1883 192.168.1.200 2883
+system configuration save
+```
+
 ## Конфигурация
 ```yaml
 mqtt:
@@ -49,6 +59,7 @@ bridge:
   retain: true
   debug: false
 ```
+
 
 ### Дополнительные переменные окружения
 - `NB_PENDING_HOLD_SEC` (по умолчанию 60) — окно ожидания подтверждения команд.
