@@ -1,46 +1,45 @@
-﻿## Neptun ProW+WiFi Local Bridge
+## Neptun ProW+WiFi Local Bridge Add-on
 
-Локальный мост для системы Neptun ProW+WiFi в Home Assistant.
-Дополнение поднимает встроенный брокер Mosquitto, перехватывает соединение устройства и перенаправляет данные
-в Home Assistant MQTT (`core-mosquitto`), так что управлять Neptun можно полностью локально без облака SST Cloud.
+Local bridge for the Neptun ProW+WiFi system in Home Assistant.
+The add-on starts an embedded Mosquitto broker, intercepts the device connection, and forwards data to Home Assistant MQTT (`core-mosquitto`), so you can control Neptun entirely locally without the SST Cloud.
 
-## Основные возможности
-- Приём бинарных кадров Neptun и публикация структурированных MQTT-топиков `neptun/<MAC>/...`.
-- Автоматическое создание и актуализация сущностей Home Assistant через MQTT Discovery.
-- Управление клапаном, Floor Wash и Close On Offline с повторными отправками и защитой от «фликера».
-- Публикация счётчиков, состояний линий, диагностики сигнала и других атрибутов с поддержкой `retain`.
-- Вывод подробного лога и публикация необработанных кадров в `neptun/<MAC>/raw/*` для отладки.
+## Key Features
+- Receives Neptun binary frames and publishes structured MQTT topics under `neptun/<MAC>/...`.
+- Automatically creates and updates Home Assistant entities via MQTT Discovery.
+- Controls the valve, Floor Wash, and Close On Offline with retries and flicker protection.
+- Publishes counters, line states, signal diagnostics, and other attributes with `retain` support.
+- Writes a detailed log and publishes raw frames to `neptun/<MAC>/raw/*` for debugging.
 
-## Что нового в 0.2.0
-- Обновлённые discovery-пакеты с динамическими иконками и цветами (модуль, датчики протечки, RSSI, батареи, клапан).
-- Повторные отправки команд и окно ожидания (по умолчанию 60 секунд) для Floor Wash, клапана и Close On Offline.
-- Переработанная обработка телеметрии беспроводных датчиков и унифицированная запись Line Type/счётчиков.
-- Улучшенные retain-настройки, чтобы состояния не терялись после перезапуска Home Assistant.
+## What's New in 0.2.0
+- Refreshed discovery payloads with dynamic icons and colors (module, leak sensors, RSSI, batteries, valve).
+- Command retries and a waiting window (60 seconds by default) for Floor Wash, the valve, and Close On Offline.
+- Reworked telemetry handling for wireless sensors with unified Line Type/counter entries.
+- Improved `retain` settings to keep states after restarting Home Assistant.
 
-## Требования
-- Home Assistant OS или Supervisor с доступом к магазину дополнений.
-- MQTT-брокер Home Assistant (`core-mosquitto`) или другой доступный брокер.
-- Возможность перенаправить облачный адрес Neptun `185.76.147.189:1883` на локальный `IP_HA:2883` (NAT/redirect).
-- Учётные данные MQTT в `/config/secrets.yaml`, если брокер требует авторизацию.
+## Requirements
+- Home Assistant OS or Supervisor with access to the add-on store.
+- Home Assistant MQTT broker (`core-mosquitto`) or another accessible broker.
+- Ability to redirect the Neptun cloud endpoint `185.76.147.189:1883` to the local `IP_HA:2883` (NAT/redirect).
+- MQTT credentials in `/config/secrets.yaml` if the broker requires authentication.
 
-## Установка
-1. Добавьте репозиторий `https://github.com/dima11235/ha-neptun-addon` в магазине дополнений.
-2. Установите и запустите **Neptun ProW+WiFi Local Bridge**.
-3. Заполните раздел «Конфигурация» и добавьте секреты в `/config/secrets.yaml`.
-4. Настройте NAT/redirect на маршрутизаторе, чтобы устройство Neptun подключалось к `IP_HA:2883` вместо SST Cloud.
-5. Проверьте лог и убедитесь, что сущности Neptun появились в Home Assistant.
+## Installation
+1. Add the repository `https://github.com/dima11235/ha-neptun-addon` in the add-on store.
+2. Install and start **Neptun ProW+WiFi Local Bridge**.
+3. Fill in the **Configuration** section and add secrets to `/config/secrets.yaml`.
+4. Configure NAT/redirect on your router so the Neptun device connects to `IP_HA:2883` instead of the SST Cloud.
+5. Review the log and make sure Neptun entities appear in Home Assistant.
 
-Переадресация облака → аддон (NAT)
-- Облачный адрес: `185.76.147.189:1883`
-- Локальный: `IP_HA:<listen_port>` (по умолчанию `2883`)
+Cloud to add-on redirection (NAT)
+- Cloud endpoint: `185.76.147.189:1883`
+- Local endpoint: `IP_HA:<listen_port>` (default `2883`)
 
-Keenetic (CLI), где `192.168.1.200` — IP HA:
+Keenetic (CLI), where `192.168.1.200` is the HA IP:
 ```
 ip static tcp 185.76.147.189/32 1883 192.168.1.200 2883
 system configuration save
 ```
 
-## Конфигурация
+## Configuration
 ```yaml
 mqtt:
   listen_port: 2883
@@ -60,23 +59,22 @@ bridge:
   debug: false
 ```
 
+### Additional Environment Variables
+- `NB_PENDING_HOLD_SEC` (default 60) - command confirmation wait window.
+- `NB_MODULE_LOST_TIMEOUT` (default 300) - timeout for marking a module as lost.
+- `NB_WATCHDOG_PERIOD` (default 30) - background monitoring interval.
+- `NB_DEBUG` enables verbose logging; `NB_RETAIN` toggles the default retain behavior.
 
-### Дополнительные переменные окружения
-- `NB_PENDING_HOLD_SEC` (по умолчанию 60) — окно ожидания подтверждения команд.
-- `NB_MODULE_LOST_TIMEOUT` (по умолчанию 300) — таймаут признания модуля «потерянным».
-- `NB_WATCHDOG_PERIOD` (по умолчанию 30) — период фонового мониторинга.
-- `NB_DEBUG` — подробный лог, `NB_RETAIN` — управление retain по умолчанию.
-
-### Пример секретов (`/config/secrets.yaml`)
+### Secrets Example (`/config/secrets.yaml`)
 ```yaml
 mqtt_username: myuser
 mqtt_password: mypass
 ```
 
-## Диагностика
-- Включите `debug: true`, чтобы видеть подробный лог подключения и разбор MQTT-кадров.
-- Используйте топики `neptun/<MAC>/raw/*` для анализа исходных данных.
-- Если сущности не обновляются, проверьте правила NAT и подключение устройства к `IP_HA:listen_port`.
+## Troubleshooting
+- Enable `debug: true` to capture detailed connection logs and MQTT frame parsing.
+- Use the `neptun/<MAC>/raw/*` topics to inspect raw data.
+- If entities do not update, verify your NAT rules and that the device connects to `IP_HA:listen_port`.
 
-## Обратная связь
-Сообщайте об ошибках и предлагайте улучшения через Issues GitHub или присылайте Pull Request.
+## Feedback
+Report bugs and suggest improvements through GitHub Issues or submit a Pull Request.
