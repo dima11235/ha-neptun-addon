@@ -470,7 +470,7 @@ def icon_name(kind: str, value) -> str:
             return "mdi:signal-off" if v in ("yes", "on", "1", "true") else "mdi:signal"
         if k in ("module_lost",):
             v = str(value).strip().lower()
-            return "mdi:server-off" if v in ("yes", "on", "1", "true") else "mdi:server"
+            return "mdi:cloud-off-outline" if v in ("yes", "on", "1", "true") else "mdi:cloud-outline"
         if k in ("module_alert",):
             v = str(value).strip().lower()
             return "mdi:alert-circle-outline" if v in ("yes", "on", "1", "true") else "mdi:check-circle-outline"
@@ -982,7 +982,7 @@ def ensure_discovery(mac):
         "payload_on": "yes",
         "payload_off": "no",
         "device_class": "problem",
-        "icon": "mdi:server-off",
+        "icon": "mdi:cloud-off-outline",
         "json_attributes_topic": f"{base_topic}/attributes/module_lost",
         "device": device
     }
