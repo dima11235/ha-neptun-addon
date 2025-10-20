@@ -105,7 +105,11 @@ def decode_status_name(s: int) -> str:
     if s & 0x02: arr.append("MAIN BATTERY")
     if s & 0x04: arr.append("SENSOR BATTERY")
     if s & 0x08: arr.append("SENSOR OFFLINE")
-    return ",".join(arr)
+    if s & 0x10: arr.append("FLOOR WASH")
+    extra = s & ~0x0F
+    if extra:
+        arr.append(f"UNKNOWN(0x{extra:02X})")
+    return ",".join(arr) if arr else f"UNKNOWN(0x{s:02X})"
 
 # [BRIDGE DOC] Decode 4-bit line input config into sensor/counter labels per line.
 def map_lines_in(mask: int):
@@ -1030,6 +1034,8 @@ def publish_system(mac_from_topic, buf: bytes):
     valid 0x52 frame received from the Neptun cloud.
     """
     st = parse_system_state(buf)
+    if "status" in st and not st.get("status_name"):
+        st["status_name"] = decode_status_name(st["status"])
     mac = st.get("mac", mac_from_topic)
     base = f"{TOPIC_PREFIX}/{mac}"
     device, safe_mac, dev_id = make_device(mac)
