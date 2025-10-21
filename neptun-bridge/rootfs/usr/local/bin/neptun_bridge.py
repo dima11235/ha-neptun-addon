@@ -106,7 +106,8 @@ def decode_status_name(s: int) -> str:
     if s & 0x04: arr.append("SENSOR BATTERY")
     if s & 0x08: arr.append("SENSOR OFFLINE")
     if s & 0x10: arr.append("FLOOR WASH")
-    extra = s & ~0x0F
+    known_bits = 0x01 | 0x02 | 0x04 | 0x08 | 0x10
+    extra = s & ~known_bits
     if extra:
         arr.append(f"UNKNOWN(0x{extra:02X})")
     return ",".join(arr) if arr else f"UNKNOWN(0x{s:02X})"
