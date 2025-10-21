@@ -1731,7 +1731,11 @@ def on_message(c, userdata, msg):
                 pass
 
         elif t.startswith(f"{TOPIC_PREFIX}/") and "/cmd/" in t:
-            
+            # Ignore retained command payloads so old HA messages do not re-trigger actions after restart
+            if getattr(msg, "retain", False):
+                if DEBUG:
+                    log("Skip retained command", t)
+                return
             parts = t.split("/")
             # [neptun, <mac>, cmd, ...]
             mac = parts[1]
