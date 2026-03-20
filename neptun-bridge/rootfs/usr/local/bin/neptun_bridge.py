@@ -190,6 +190,22 @@ def wireless_sensor_status_entry(snapshot: dict) -> dict:
     return entry
 
 
+def publish_visual_attributes(topic: str, kind: str, value, retain: bool = False, include_icon: bool = True):
+    payload = {"icon_color": icon_color(kind, value)}
+    if include_icon:
+        payload["icon"] = icon_name(kind, value)
+    try:
+        pub(topic, payload, retain=retain)
+    except Exception:
+        pass
+
+
+def publish_discovery_config(component: str, object_id: str, device: dict, **config):
+    payload = {"unique_id": object_id, "device": device}
+    payload.update(config)
+    pub(f"{DISCOVERY_PRE}/{component}/{object_id}/config", payload, retain=True)
+
+
 def publish_wireless_sensor_metrics(base: str, snapshot: dict):
     """Publish MQTT topics for battery, signal and leak metrics."""
     sensor_id = snapshot["sensor_id"]
@@ -198,36 +214,15 @@ def publish_wireless_sensor_metrics(base: str, snapshot: dict):
     battery = snapshot.get("battery")
     if battery is not None:
         pub(f"{topics_base}/battery", battery, retain=False)
-        try:
-            pub(
-                f"{topics_base}/attributes/battery",
-                {"icon_color": icon_color("battery_percent", battery)},
-                retain=False,
-            )
-        except Exception:
-            pass
+        publish_visual_attributes(f"{topics_base}/attributes/battery", "battery_percent", battery, retain=False, include_icon=False)
 
     signal_percent = snapshot["signal_percent"]
     pub(f"{topics_base}/signal_level", signal_percent, retain=False)
-    try:
-        pub(
-            f"{topics_base}/attributes/signal",
-            {"icon_color": icon_color("signal", signal_percent), "icon": icon_name("signal", signal_percent)},
-            retain=False,
-        )
-    except Exception:
-        pass
+    publish_visual_attributes(f"{topics_base}/attributes/signal", "signal", signal_percent, retain=False)
 
     attention = snapshot["attention"]
     pub(f"{topics_base}/attention", attention, retain=False)
-    try:
-        pub(
-            f"{topics_base}/attributes/leak",
-            {"icon_color": icon_color("leak", attention), "icon": icon_name("leak", attention)},
-            retain=False,
-        )
-    except Exception:
-        pass
+    publish_visual_attributes(f"{topics_base}/attributes/leak", "leak", attention, retain=False)
 
 
 def publish_wireless_sensor_discovery(mac: str, safe_mac: str, device: dict, base: str, snapshot: dict):
@@ -236,29 +231,29 @@ def publish_wireless_sensor_discovery(mac: str, safe_mac: str, device: dict, bas
     topics_base = f"{base}/sensors_status/{sensor_id}"
 
     leak_id = f"neptun_{safe_mac}_sensor_{sensor_id}_leak"
-    leak_conf = {
-        "name": f"Sensor {sensor_id} Leak",
-        "unique_id": leak_id,
-        "state_topic": f"{topics_base}/attention",
-        "payload_on": "1",
-        "payload_off": "0",
-        "device_class": "moisture",
-        "json_attributes_topic": f"{topics_base}/attributes/leak",
-        "device": device,
-    }
-    pub(f"{DISCOVERY_PRE}/binary_sensor/{leak_id}/config", leak_conf, retain=True)
+    publish_discovery_config(
+        "binary_sensor",
+        leak_id,
+        device,
+        name=f"Sensor {sensor_id} Leak",
+        state_topic=f"{topics_base}/attention",
+        payload_on="1",
+        payload_off="0",
+        device_class="moisture",
+        json_attributes_topic=f"{topics_base}/attributes/leak",
+    )
 
     battery_id = f"neptun_{safe_mac}_sensor_{sensor_id}_battery"
-    battery_conf = {
-        "name": f"Sensor {sensor_id} Battery",
-        "unique_id": battery_id,
-        "state_topic": f"{topics_base}/battery",
-        "unit_of_measurement": "%",
-        "device_class": "battery",
-        "json_attributes_topic": f"{topics_base}/attributes/battery",
-        "device": device,
-    }
-    pub(f"{DISCOVERY_PRE}/sensor/{battery_id}/config", battery_conf, retain=True)
+    publish_discovery_config(
+        "sensor",
+        battery_id,
+        device,
+        name=f"Sensor {sensor_id} Battery",
+        state_topic=f"{topics_base}/battery",
+        unit_of_measurement="%",
+        device_class="battery",
+        json_attributes_topic=f"{topics_base}/attributes/battery",
+    )
 
     signal_percent = snapshot["signal_percent"]
     try:
@@ -271,16 +266,16 @@ def publish_wireless_sensor_discovery(mac: str, safe_mac: str, device: dict, bas
         last_bucket = buckets.get(sensor_id)
         if bucket != last_bucket:
             signal_id = f"neptun_{safe_mac}_sensor_{sensor_id}_signal_level"
-            signal_conf = {
-                "name": f"Sensor {sensor_id} RSSI",
-                "unique_id": signal_id,
-                "state_topic": f"{topics_base}/signal_level",
-                "unit_of_measurement": "%",
-                "icon": icon_name("signal", signal_percent),
-                "json_attributes_topic": f"{topics_base}/attributes/signal",
-                "device": device,
-            }
-            pub(f"{DISCOVERY_PRE}/sensor/{signal_id}/config", signal_conf, retain=True)
+            publish_discovery_config(
+                "sensor",
+                signal_id,
+                device,
+                name=f"Sensor {sensor_id} RSSI",
+                state_topic=f"{topics_base}/signal_level",
+                unit_of_measurement="%",
+                icon=icon_name("signal", signal_percent),
+                json_attributes_topic=f"{topics_base}/attributes/signal",
+            )
             buckets[sensor_id] = bucket
             prev_cache["sensor_rssi_bucket"] = buckets
             state_cache[mac] = prev_cache
@@ -655,20 +650,20 @@ def ensure_discovery(mac):
     
     # Switch entity for valve control (replaces two stateless buttons)
     sw_valve_id = f"neptun_{safe_mac}_valve"
-    sw_valve_conf = {
-        "name": f"Valve",
-        "unique_id": sw_valve_id,
-        "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/valve/set",
-        "state_topic": f"{TOPIC_PREFIX}/{mac}/state/valve_open",
-        "payload_on": "1",
-        "payload_off": "0",
-        "icon": "mdi:valve",
-        "qos": 0,
-        "retain": True,
-        "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/attributes/valve_switch",
-        "device": device
-    }
-    pub(f"{DISCOVERY_PRE}/switch/{sw_valve_id}/config", sw_valve_conf, retain=True)
+    publish_discovery_config(
+        "switch",
+        sw_valve_id,
+        device,
+        name="Valve",
+        command_topic=f"{TOPIC_PREFIX}/{mac}/cmd/valve/set",
+        state_topic=f"{TOPIC_PREFIX}/{mac}/state/valve_open",
+        payload_on="1",
+        payload_off="0",
+        icon="mdi:valve",
+        qos=0,
+        retain=True,
+        json_attributes_topic=f"{TOPIC_PREFIX}/{mac}/attributes/valve_switch",
+    )
     # Publish empty payloads to old button discovery topics to remove them (cleanup)
     try:
         btn_open_id = f"neptun_{safe_mac}_valve_open"
@@ -682,117 +677,117 @@ def ensure_discovery(mac):
 
     # Add MQTT switch for Floor Wash (dry mode control)
     obj_id2 = f"neptun_{safe_mac}_dry_flag"
-    conf2 = {
-        "name": f"Floor Wash",
-        "unique_id": obj_id2,
-        "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/dry_flag/set",
-        "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/dry_flag",
-        "payload_on": "on",
-        "payload_off": "off",
-        "qos": 0,
-        "retain": True,
-        "icon": "mdi:water-circle",
-        "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/attributes/dry_flag",
-        "device": device
-    }
-    pub(f"{DISCOVERY_PRE}/switch/{obj_id2}/config", conf2, retain=True)
+    publish_discovery_config(
+        "switch",
+        obj_id2,
+        device,
+        name="Floor Wash",
+        command_topic=f"{TOPIC_PREFIX}/{mac}/cmd/dry_flag/set",
+        state_topic=f"{TOPIC_PREFIX}/{mac}/settings/dry_flag",
+        payload_on="on",
+        payload_off="off",
+        qos=0,
+        retain=True,
+        icon="mdi:water-circle",
+        json_attributes_topic=f"{TOPIC_PREFIX}/{mac}/attributes/dry_flag",
+    )
 
     # Add MQTT switch for Close On Offline
     obj_id3 = f"neptun_{safe_mac}_close_on_offline"
-    conf3 = {
-        "name": f"Close On Offline",
-        "unique_id": obj_id3,
-        "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/close_on_offline/set",
-        "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/close_valve_flag",
-        "payload_on": "close",
-        "payload_off": "open",
-        "qos": 0,
-        "retain": True,
-        "icon": "mdi:water-alert-outline",
-        "entity_category": "config",
-        "device": device
-    }
-    pub(f"{DISCOVERY_PRE}/switch/{obj_id3}/config", conf3, retain=True)
+    publish_discovery_config(
+        "switch",
+        obj_id3,
+        device,
+        name="Close On Offline",
+        command_topic=f"{TOPIC_PREFIX}/{mac}/cmd/close_on_offline/set",
+        state_topic=f"{TOPIC_PREFIX}/{mac}/settings/close_valve_flag",
+        payload_on="close",
+        payload_off="open",
+        qos=0,
+        retain=True,
+        icon="mdi:water-alert-outline",
+        entity_category="config",
+    )
 
     # Add MQTT selects for wired line types (sensor/counter)
     for i in range(1,5):
         sel_id = f"neptun_{safe_mac}_line_{i}_type"
-        sel_conf = {
-            "name": f"Line {i} Type",
-            "unique_id": sel_id,
-            "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/line_{i}_type/set",
-            "state_topic": f"{TOPIC_PREFIX}/{mac}/settings/lines_in/line_{i}",
-            "options": ["sensor", "counter"],
-            "icon": "mdi:tune",
-            "entity_category": "config",
-            "device": device
-        }
-        pub(f"{DISCOVERY_PRE}/select/{sel_id}/config", sel_conf, retain=True)
+        publish_discovery_config(
+            "select",
+            sel_id,
+            device,
+            name=f"Line {i} Type",
+            command_topic=f"{TOPIC_PREFIX}/{mac}/cmd/line_{i}_type/set",
+            state_topic=f"{TOPIC_PREFIX}/{mac}/settings/lines_in/line_{i}",
+            options=["sensor", "counter"],
+            icon="mdi:tune",
+            entity_category="config",
+        )
 
     for i in range(1,5):
         # Derived: cubic meters from liters via value_template
         sidM = f"neptun_{safe_mac}_line_{i}_counter"
-        confM = {
-            "name": f"Line {i} Counter",
-            "unique_id": sidM,
-            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/value",
-            "device_class": "water",
-            "unit_of_measurement": "m\u00B3",
-            "state_class": "total",
-            "value_template": "{{ value | float / 1000 }}",
-            "icon": "mdi:counter",
-            "device": device
-        }
-        pub(f"{DISCOVERY_PRE}/sensor/{sidM}/config", confM, retain=True)
+        publish_discovery_config(
+            "sensor",
+            sidM,
+            device,
+            name=f"Line {i} Counter",
+            state_topic=f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/value",
+            device_class="water",
+            unit_of_measurement="m\u00B3",
+            state_class="total",
+            value_template="{{ value | float / 1000 }}",
+            icon="mdi:counter",
+        )
 
         # Step in liters per pulse (L/pulse)
         sidS = f"neptun_{safe_mac}_line_{i}_step"
-        confS = {
-            "name": f"Line {i} Counter Step",
-            "unique_id": sidS,
-            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/step",
-            "unit_of_measurement": "L/pulse",
-            "icon": "mdi:counter",
-            "entity_category": "diagnostic",
-            "device": device
-        }
-        pub(f"{DISCOVERY_PRE}/sensor/{sidS}/config", confS, retain=True)
+        publish_discovery_config(
+            "sensor",
+            sidS,
+            device,
+            name=f"Line {i} Counter Step",
+            state_topic=f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/step",
+            unit_of_measurement="L/pulse",
+            icon="mdi:counter",
+            entity_category="diagnostic",
+        )
 
         # Number entity to SET counter value in liters
         numV_id = f"neptun_{safe_mac}_line_{i}_counter_set"
-        numV_conf = {
-            "name": f"Line {i} Counter (set)",
-            "unique_id": numV_id,
-            "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/counters/line_{i}/value/set",
-            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/value",
-            "unit_of_measurement": "L",
-            "icon": "mdi:counter",
-            "min": 0,
-            "max": 1000000000,
-            "step": 1,
-            "mode": "box",
-            "entity_category": "config",
-            "device": device
-        }
-        pub(f"{DISCOVERY_PRE}/number/{numV_id}/config", numV_conf, retain=True)
+        publish_discovery_config(
+            "number",
+            numV_id,
+            device,
+            name=f"Line {i} Counter (set)",
+            command_topic=f"{TOPIC_PREFIX}/{mac}/cmd/counters/line_{i}/value/set",
+            state_topic=f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/value",
+            unit_of_measurement="L",
+            icon="mdi:counter",
+            min=0,
+            max=1000000000,
+            step=1,
+            mode="box",
+            entity_category="config",
+        )
 
         # Number entity to SET counter step in L/pulse
         numS_id = f"neptun_{safe_mac}_line_{i}_step_set"
-        numS_conf = {
-            "name": f"Line {i} Step (set)",
-            "unique_id": numS_id,
-            "command_topic": f"{TOPIC_PREFIX}/{mac}/cmd/counters/line_{i}/step/set",
-            "state_topic": f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/step",
-            "unit_of_measurement": "L/pulse",
-            "icon": "mdi:counter",
-            "min": 1,
-            "max": 255,
-            "step": 1,
-            "mode": "box",
-            "entity_category": "config",
-            "device": device
-        }
-        pub(f"{DISCOVERY_PRE}/number/{numS_id}/config", numS_conf, retain=True)
+        publish_discovery_config(
+            "number",
+            numS_id,
+            device,
+            name=f"Line {i} Step (set)",
+            command_topic=f"{TOPIC_PREFIX}/{mac}/cmd/counters/line_{i}/step/set",
+            state_topic=f"{TOPIC_PREFIX}/{mac}/counters/line_{i}/step",
+            unit_of_measurement="L/pulse",
+            icon="mdi:counter",
+            min=1,
+            max=255,
+            step=1,
+            mode="box",
+            entity_category="config",
+        )
 
     # Device time (timestamp sensor)
     dt_id = f"neptun_{safe_mac}_last_seen"
@@ -1092,14 +1087,7 @@ def publish_system(mac_from_topic, buf: bytes):
     }
     
     pub(f"{base}/settings/status/alert", settings["status"]["alert"], retain=True)
-    try:
-        pub(
-            f"{base}/attributes/leak_detected",
-            {"icon_color": icon_color("leak", settings["status"]["alert"]), "icon": icon_name("leak", settings["status"]["alert"])},
-            retain=False,
-        )
-    except Exception:
-        pass
+    publish_visual_attributes(f"{base}/attributes/leak_detected", "leak", settings["status"]["alert"], retain=False)
     # Anti-flicker for dry_flag: suppress contradictory publishes while a recent command is pending
     allow_publish_dry = True
     try:
@@ -1128,14 +1116,7 @@ def publish_system(mac_from_topic, buf: bytes):
     if allow_publish_dry:
         pub(f"{base}/settings/status/dry_flag", settings["status"]["dry_flag"], retain=True)
     pub(f"{base}/settings/status/sensors_lost", settings["status"]["sensors_lost"], retain=True)
-    try:
-        pub(
-            f"{base}/attributes/sensors_lost",
-            {"icon_color": icon_color("sensors_lost", settings["status"]["sensors_lost"]), "icon": icon_name("sensors_lost", settings["status"]["sensors_lost"])},
-            retain=False,
-        )
-    except Exception:
-        pass
+    publish_visual_attributes(f"{base}/attributes/sensors_lost", "sensors_lost", settings["status"]["sensors_lost"], retain=False)
     # Update discovery icon when sensors_lost bucket changes
     try:
         bucket = str(settings["status"]["sensors_lost"]).strip().lower()
@@ -1144,60 +1125,32 @@ def publish_system(mac_from_topic, buf: bytes):
         if bucket != last_b:
             device, safe_mac, dev_id = make_device(mac)
             sens_lost_id = f"neptun_{safe_mac}_sensors_lost"
-            sens_lost_conf = {
-                "name": f"Sensors Lost",
-                "unique_id": sens_lost_id,
-                "state_topic": f"{base}/settings/status/sensors_lost",
-                "payload_on": "yes",
-                "payload_off": "no",
-                "device_class": "problem",
-                "icon": icon_name("sensors_lost", bucket),
-                "json_attributes_topic": f"{base}/attributes/sensors_lost",
-                "device": device
-            }
-            pub(f"{DISCOVERY_PRE}/binary_sensor/{sens_lost_id}/config", sens_lost_conf, retain=True)
+            publish_discovery_config(
+                "binary_sensor",
+                sens_lost_id,
+                device,
+                name="Sensors Lost",
+                state_topic=f"{base}/settings/status/sensors_lost",
+                payload_on="yes",
+                payload_off="no",
+                device_class="problem",
+                icon=icon_name("sensors_lost", bucket),
+                json_attributes_topic=f"{base}/attributes/sensors_lost",
+            )
             prev_cache["sensors_lost_bucket"] = bucket
             state_cache[mac] = prev_cache
     except Exception:
         pass
     pub(f"{base}/settings/status/battery_discharge_in_module", settings["status"]["battery_discharge_in_module"], retain=True)
-    try:
-        pub(
-            f"{base}/attributes/module_battery",
-            {"icon_color": icon_color("battery_flag", settings["status"]["battery_discharge_in_module"]), "icon": icon_name("battery_flag", settings["status"]["battery_discharge_in_module"])},
-            retain=False,
-        )
-    except Exception:
-        pass
+    publish_visual_attributes(f"{base}/attributes/module_battery", "battery_flag", settings["status"]["battery_discharge_in_module"], retain=False)
     pub(f"{base}/settings/status/battery_discharge_in_sensor", settings["status"]["battery_discharge_in_sensor"], retain=True)
-    try:
-        pub(
-            f"{base}/attributes/sensors_battery",
-            {"icon_color": icon_color("battery_flag", settings["status"]["battery_discharge_in_sensor"]), "icon": icon_name("battery_flag", settings["status"]["battery_discharge_in_sensor"])},
-            retain=False,
-        )
-    except Exception:
-        pass
+    publish_visual_attributes(f"{base}/attributes/sensors_battery", "battery_flag", settings["status"]["battery_discharge_in_sensor"], retain=False)
     pub(f"{base}/settings/status/module_alert", settings["status"]["module_alert"], retain=True)
-    try:
-        pub(
-            f"{base}/attributes/module_alert",
-            {"icon_color": icon_color("module_alert", settings["status"]["module_alert"]), "icon": icon_name("module_alert", settings["status"]["module_alert"])},
-            retain=False,
-        )
-    except Exception:
-        pass
+    publish_visual_attributes(f"{base}/attributes/module_alert", "module_alert", settings["status"]["module_alert"], retain=False)
     if allow_publish_dry:
         pub(f"{base}/settings/dry_flag", settings["dry_flag"], retain=True)
-    try:
-        if allow_publish_dry:
-            pub(
-                f"{base}/attributes/dry_flag",
-                {"icon_color": icon_color("floor_wash", settings["dry_flag"])},
-                retain=False,
-            )
-    except Exception:
-        pass
+    if allow_publish_dry:
+        publish_visual_attributes(f"{base}/attributes/dry_flag", "floor_wash", settings["dry_flag"], retain=False, include_icon=False)
     pub(f"{base}/settings/relay_count", settings["relay_count"], retain=True)
     pub(f"{base}/settings/sensors_count", settings["sensors_count"], retain=True)
     pub(f"{base}/settings/valve_settings", settings["valve_settings"], retain=True)
@@ -1214,14 +1167,7 @@ def publish_system(mac_from_topic, buf: bytes):
         except Exception:
             w = 0
         pub(f"{base}/signal_level", w, retain=False)
-        try:
-            pub(
-                f"{base}/attributes/module_rssi",
-                {"icon_color": icon_color("signal", w), "icon": icon_name("signal", w)},
-                retain=False,
-            )
-        except Exception:
-            pass
+        publish_visual_attributes(f"{base}/attributes/module_rssi", "signal", w, retain=False)
         # Only update discovery icon if the RSSI bucket changed (off/1/2/3/4)
         try:
             bucket = signal_bucket(w)
@@ -1230,18 +1176,18 @@ def publish_system(mac_from_topic, buf: bytes):
             if bucket != last_b:
                 device, safe_mac, dev_id = make_device(mac)
                 rssi_id = f"neptun_{safe_mac}_module_rssi"
-                rssi_conf = {
-                    "name": f"Module RSSI",
-                    "unique_id": rssi_id,
-                    "state_topic": f"{TOPIC_PREFIX}/{mac}/signal_level",
-                    "unit_of_measurement": "%",
-                    "state_class": "measurement",
-                    "icon": icon_name("signal", w),
-                    "entity_category": "diagnostic",
-                    "json_attributes_topic": f"{TOPIC_PREFIX}/{mac}/attributes/module_rssi",
-                    "device": device
-                }
-                pub(f"{DISCOVERY_PRE}/sensor/{rssi_id}/config", rssi_conf, retain=True)
+                publish_discovery_config(
+                    "sensor",
+                    rssi_id,
+                    device,
+                    name="Module RSSI",
+                    state_topic=f"{TOPIC_PREFIX}/{mac}/signal_level",
+                    unit_of_measurement="%",
+                    state_class="measurement",
+                    icon=icon_name("signal", w),
+                    entity_category="diagnostic",
+                    json_attributes_topic=f"{TOPIC_PREFIX}/{mac}/attributes/module_rssi",
+                )
                 prev_cache["module_rssi_bucket"] = bucket
                 state_cache[mac] = prev_cache
         except Exception:
@@ -1324,14 +1270,7 @@ def publish_system(mac_from_topic, buf: bytes):
             wireless_same_zone = ((i+1) in wireless_leaks)
             stv = "on" if (is_sensor_line and wired_active and not wireless_same_zone) else "off"
             pub(f"{base}/lines_status/line_{i+1}", stv, retain=False)
-            try:
-                pub(
-                    f"{base}/lines_status/line_{i+1}/attributes",
-                    {"icon_color": icon_color("leak", stv), "icon": icon_name("leak", stv)},
-                    retain=False,
-                )
-            except Exception:
-                pass
+            publish_visual_attributes(f"{base}/lines_status/line_{i+1}/attributes", "leak", stv, retain=False)
 
     # Do not publish duplicate line input types under base/lines_in/*.
     # Kept only settings/lines_in/{k} publishes above for a single source of truth.
@@ -1368,24 +1307,9 @@ def publish_system(mac_from_topic, buf: bytes):
             pass
         if allow_publish:
             pub(f"{base}/state/valve_open", v, retain=False)
-        try:
-            if allow_publish:
-                pub(
-                    f"{base}/attributes/valve_closed",
-                    {"icon_color": icon_color("valve_closed", v), "icon": icon_name("valve_closed", v)},
-                    retain=False,
-                )
-        except Exception:
-            pass
-        try:
-            if allow_publish:
-                pub(
-                    f"{base}/attributes/valve_switch",
-                    {"icon_color": icon_color("valve_switch", v)},
-                    retain=False,
-                )
-        except Exception:
-            pass
+        if allow_publish:
+            publish_visual_attributes(f"{base}/attributes/valve_closed", "valve_closed", v, retain=False)
+            publish_visual_attributes(f"{base}/attributes/valve_switch", "valve_switch", v, retain=False, include_icon=False)
         # Republish discovery for valve_closed only when state bucket changes (open/closed)
         try:
             if allow_publish:
@@ -1394,18 +1318,18 @@ def publish_system(mac_from_topic, buf: bytes):
                 last_b = prev_cache.get("valve_state_bucket")
                 if bucket != last_b:
                     valve_closed_id = f"neptun_{safe_mac}_valve_closed"
-                    valve_closed_conf = {
-                        "name": f"Valve Closed",
-                        "unique_id": valve_closed_id,
-                        "state_topic": f"{base}/state/valve_open",
-                        "payload_on": "0",
-                        "payload_off": "1",
-                        "device_class": "problem",
-                        "icon": icon_name("valve_closed", v),
-                        "json_attributes_topic": f"{base}/attributes/valve_closed",
-                        "device": device
-                    }
-                    pub(f"{DISCOVERY_PRE}/binary_sensor/{valve_closed_id}/config", valve_closed_conf, retain=True)
+                    publish_discovery_config(
+                        "binary_sensor",
+                        valve_closed_id,
+                        device,
+                        name="Valve Closed",
+                        state_topic=f"{base}/state/valve_open",
+                        payload_on="0",
+                        payload_off="1",
+                        device_class="problem",
+                        icon=icon_name("valve_closed", v),
+                        json_attributes_topic=f"{base}/attributes/valve_closed",
+                    )
                     prev_cache["valve_state_bucket"] = bucket
                     state_cache[mac] = prev_cache
         except Exception:
@@ -1413,14 +1337,7 @@ def publish_system(mac_from_topic, buf: bytes):
     if "status" in st: pub(f"{base}/state/status", st["status"], retain=False)
     if "status_name" in st and st["status_name"]:
         pub(f"{base}/state/status_name", st["status_name"], retain=False)
-        try:
-            pub(
-                f"{base}/attributes/module_status",
-                {"icon_color": icon_color("status_text", st["status_name"]), "icon": icon_name("status_text", st["status_name"])},
-                retain=False,
-            )
-        except Exception:
-            pass
+        publish_visual_attributes(f"{base}/attributes/module_status", "status_text", st["status_name"], retain=False)
 
 # [BRIDGE DOC] Handle 0x53: publish per-sensor battery, signal and attention flag.
 def publish_sensor_state(mac_from_topic, buf: bytes):
@@ -1648,6 +1565,258 @@ def _retry_apply_counter_step(mac: str, idx: int, desired_step: int):
         if not ok:
             break
 
+
+def _decode_text_payload(msg) -> str:
+    return (msg.payload.decode("utf-8", "ignore") if msg.payload else "").strip()
+
+
+def _handle_cloud_frame(topic: str, payload) -> None:
+    mac = topic.split("/")[1]
+    try:
+        pref = topic.split("/")[0]
+        mac_to_prefix[mac] = pref
+    except Exception:
+        pass
+
+    buf = payload if isinstance(payload, (bytes, bytearray)) else bytes(payload)
+    if not buf or len(buf) < 8:
+        return
+
+    publish_raw(mac, buf)
+    if not frame_ok(buf):
+        log("Bad frame", topic, buf.hex())
+        return
+
+    try:
+        now_ts = time.time()
+        prev_ts = float(last_seen.get(mac, 0) or 0)
+        gap = int(now_ts - prev_ts) if prev_ts > 0 else 0
+        base = f"{TOPIC_PREFIX}/{mac}"
+        pub(f"{base}/frame_interval_seconds", gap, retain=True)
+        last_seen[mac] = now_ts
+    except Exception:
+        pass
+
+    typ = buf[3]
+    if typ == 0x52:
+        publish_system(mac, buf)
+    elif typ == 0x53:
+        publish_sensor_state(mac, buf)
+
+
+def _handle_valve_command(mac: str, msg) -> None:
+    payload = _decode_text_payload(msg).upper()
+    want_open = payload in ("1", "ON", "OPEN", "TRUE")
+    try:
+        pending_valve[mac] = {"desired": bool(want_open), "ts": time.time()}
+    except Exception:
+        pass
+    if not publish_settings(mac, open_valve=want_open):
+        return
+    log("CMD valve ->", mac, "open" if want_open else "close")
+    base = f"{TOPIC_PREFIX}/{mac}"
+    pub(f"{base}/state/valve_open", "1" if want_open else "0", retain=False)
+    publish_visual_attributes(f"{base}/attributes/valve_switch", "valve_switch", ("1" if want_open else "0"), retain=False, include_icon=False)
+    try:
+        threading.Thread(target=_retry_apply_valve, args=(mac, want_open), daemon=True).start()
+    except Exception:
+        pass
+
+
+def _handle_dry_flag_command(mac: str, msg) -> None:
+    payload = _decode_text_payload(msg)
+    want_on = payload.upper() in ("1", "ON", "OPEN", "TRUE", "YES") or payload.lower() == "on"
+    try:
+        pending_dry[mac] = {"desired": bool(want_on), "ts": time.time()}
+    except Exception:
+        pass
+    if not publish_settings(mac, dry=want_on):
+        return
+    log("CMD dry_flag ->", mac, "on" if want_on else "off")
+    base = f"{TOPIC_PREFIX}/{mac}"
+    pub(f"{base}/settings/dry_flag", "on" if want_on else "off", retain=True)
+    pub(f"{base}/settings/status/dry_flag", "yes" if want_on else "no", retain=True)
+    publish_visual_attributes(f"{base}/attributes/dry_flag", "floor_wash", ("on" if want_on else "off"), retain=False, include_icon=False)
+    try:
+        threading.Thread(target=_retry_apply_dry_flag, args=(mac, want_on), daemon=True).start()
+    except Exception:
+        pass
+
+
+def _handle_close_on_offline_command(mac: str, msg) -> None:
+    payload = _decode_text_payload(msg)
+    want_on = payload.upper() in ("1", "ON", "CLOSE", "TRUE", "YES") or payload.lower() in ("on", "close")
+    if not publish_settings(mac, close_on_offline=want_on):
+        return
+    log("CMD close_on_offline ->", mac, "on" if want_on else "off")
+    base = f"{TOPIC_PREFIX}/{mac}"
+    pub(f"{base}/settings/close_valve_flag", "close" if want_on else "open", retain=True)
+    try:
+        threading.Thread(target=_retry_apply_close_on_offline, args=(mac, want_on), daemon=True).start()
+    except Exception:
+        pass
+
+
+def _parse_time_set_payload(payload: str) -> int:
+    if not payload or payload.lower() in ("now", "press"):
+        return int(time.time())
+    try:
+        return int(float(payload))
+    except Exception:
+        try:
+            dt = datetime.fromisoformat(payload)
+            if dt.tzinfo is None:
+                return int(time.mktime(dt.timetuple()))
+            return int(dt.timestamp())
+        except Exception:
+            return int(time.time())
+
+
+def _handle_time_set_command(c, mac: str, msg) -> None:
+    epoch = _parse_time_set_payload(_decode_text_payload(msg))
+    frame = compose_time_set_frame(epoch)
+    pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
+    if not pref:
+        log("No cloud prefix known for", mac, ", waiting for incoming frame to learn it")
+        return
+    c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
+    log("CMD time set (retained) ->", mac, epoch)
+
+
+def _parse_line_type_command(cmd: list, payload: str):
+    try:
+        idx = int(cmd[0].split("_")[1])
+    except Exception:
+        return None, None
+    if not (1 <= idx <= 4):
+        return None, None
+    want_counter = payload.lower() in ("1", "on", "true", "yes", "counter")
+    return idx, want_counter
+
+
+def _handle_line_type_command(mac: str, cmd: list, msg) -> None:
+    idx, want_counter = _parse_line_type_command(cmd, _decode_text_payload(msg))
+    if idx is None:
+        return
+    try:
+        base_cfg = int(state_cache.get(mac, {}).get("line_in_cfg", 0)) & 0x0F
+    except Exception:
+        base_cfg = 0
+    mask = 1 << (idx - 1)
+    new_cfg = (base_cfg | mask) if want_counter else (base_cfg & (~mask & 0x0F))
+    if not publish_settings(mac, line_cfg=new_cfg):
+        return
+    log(f"CMD line_{idx}_type ->", mac, "counter" if want_counter else "sensor")
+    base = f"{TOPIC_PREFIX}/{mac}"
+    pub(f"{base}/settings/lines_in/line_{idx}", "counter" if want_counter else "sensor", retain=True)
+    try:
+        threading.Thread(target=_retry_apply_line_type, args=(mac, idx, want_counter), daemon=True).start()
+    except Exception:
+        pass
+
+
+def _handle_module_lost_timeout_command(mac: str, msg) -> None:
+    payload = _decode_text_payload(msg)
+    try:
+        val = int(float(payload))
+    except Exception:
+        return
+    if val < 10:
+        val = 10
+    if val > 3600:
+        val = 3600
+    module_lost_timeout[mac] = val
+    base = f"{TOPIC_PREFIX}/{mac}"
+    pub(f"{base}/settings/module_lost_timeout", val, retain=True)
+    log("CMD module_lost_timeout ->", mac, val)
+
+
+def _parse_counters_command(cmd: list, payload: str):
+    try:
+        idx = int(cmd[1].split("_")[1])
+    except Exception:
+        return None, None, None
+    if not (1 <= idx <= 4):
+        return None, None, None
+    action = cmd[2]
+    if action == "value" and len(cmd) >= 4 and cmd[3] == "set":
+        try:
+            return idx, action, int(float(payload))
+        except Exception:
+            return None, None, None
+    if action == "step" and len(cmd) >= 4 and cmd[3] == "set":
+        try:
+            step = int(float(payload))
+        except Exception:
+            return None, None, None
+        if not (0 < step <= 255):
+            return None, None, None
+        return idx, action, step
+    return None, None, None
+
+
+def _handle_counters_command(mac: str, cmd: list, msg) -> None:
+    payload = _decode_text_payload(msg)
+    idx, action, value = _parse_counters_command(cmd, payload)
+    if idx is None:
+        return
+
+    updates = {idx: (value, None)} if action == "value" else {idx: (None, value)}
+    if not publish_counters_update(mac, updates):
+        return
+
+    log(f"CMD counters line_{idx} {action} ->", mac, payload)
+    try:
+        if action == "value":
+            threading.Thread(target=_retry_apply_counter_value, args=(mac, idx, value), daemon=True).start()
+        elif action == "step":
+            threading.Thread(target=_retry_apply_counter_step, args=(mac, idx, value), daemon=True).start()
+    except Exception:
+        pass
+
+
+def _handle_command_message(c, topic: str, msg) -> None:
+    if getattr(msg, "retain", False):
+        if DEBUG:
+            log("Skip retained command", topic)
+        return
+
+    parts = topic.split("/")
+    mac = parts[1]
+    cmd = parts[3:]
+
+    if cmd[:1] == ["valve"]:
+        _handle_valve_command(mac, msg)
+    elif cmd[:1] == ["dry_flag"]:
+        _handle_dry_flag_command(mac, msg)
+    elif cmd[:1] == ["close_on_offline"]:
+        _handle_close_on_offline_command(mac, msg)
+    elif cmd[:2] == ["time", "set"]:
+        _handle_time_set_command(c, mac, msg)
+    elif len(cmd) >= 1 and cmd[0].startswith("line_") and cmd[0].endswith("_type"):
+        _handle_line_type_command(mac, cmd, msg)
+    elif cmd[:1] == ["module_lost_timeout"]:
+        _handle_module_lost_timeout_command(mac, msg)
+    elif len(cmd) >= 3 and cmd[0] == "counters" and cmd[1].startswith("line_"):
+        _handle_counters_command(mac, cmd, msg)
+
+
+def _restore_retained_settings(topic: str, msg) -> None:
+    if topic.startswith(f"{TOPIC_PREFIX}/") and "/settings/" in topic and topic.endswith("/module_lost_timeout"):
+        mac = topic.split("/")[1]
+        payload = _decode_text_payload(msg)
+        try:
+            val = int(float(payload))
+        except Exception:
+            return
+        if val < 10:
+            val = 10
+        if val > 3600:
+            val = 3600
+        module_lost_timeout[mac] = val
+        if DEBUG:
+            log("RESTORE module_lost_timeout <-", mac, val)
+
 # [BRIDGE DOC] Subscribe to upstream `<prefix>/+/from` and local `neptun/+/cmd/#`.
 def on_connect(c, userdata, flags, rc):
     log("MQTT connected", rc)
@@ -1695,309 +1864,15 @@ def on_message(c, userdata, msg):
         if DEBUG:
             log("RX", t)
         if (t.endswith("/from") or t.endswith("/to")) and t.count("/") >= 2:
-            
-            mac = t.split("/")[1]
-            try:
-                pref = t.split("/")[0]
-                mac_to_prefix[mac] = pref
-            except Exception:
-                pass
-            buf = msg.payload if isinstance(msg.payload, (bytes, bytearray)) else bytes(msg.payload)
-            if not buf or len(buf) < 8:
-                return
-            
-            publish_raw(mac, buf)
-            if not frame_ok(buf):
-                log("Bad frame", t, buf.hex())
-                return
-            # On any valid device frame: compute inter-frame gap and update last_seen
-            try:
-                now_ts = time.time()
-                prev_ts = float(last_seen.get(mac, 0) or 0)
-                gap = int(now_ts - prev_ts) if prev_ts > 0 else 0
-                base = f"{TOPIC_PREFIX}/{mac}"
-                pub(f"{base}/frame_interval_seconds", gap, retain=True)
-                last_seen[mac] = now_ts
-            except Exception:
-                pass
-            typ = buf[3]
-            if typ == 0x52:
-                publish_system(mac, buf)
-            elif typ == 0x53:
-                publish_sensor_state(mac, buf)
-            elif typ in (0x4E, 0x63, 0x43):   
-                pass
-            else:
-                pass
-
+            _handle_cloud_frame(t, msg.payload)
         elif t.startswith(f"{TOPIC_PREFIX}/") and "/cmd/" in t:
-            # Ignore retained command payloads so old HA messages do not re-trigger actions after restart
-            if getattr(msg, "retain", False):
-                if DEBUG:
-                    log("Skip retained command", t)
-                return
-            parts = t.split("/")
-            # [neptun, <mac>, cmd, ...]
-            mac = parts[1]
-            cmd = parts[3:]
-            if cmd[:1] == ["valve"]:
-                
-                pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip().upper()
-                want_open = pl in ("1","ON","OPEN","TRUE")
-                # Mark command in-flight to suppress contradictory device state for a short window
-                try:
-                    pending_valve[mac] = {"desired": bool(want_open), "ts": time.time()}
-                except Exception:
-                    pass
-                # Unified publish via helper to preserve other flags
-                ok = publish_settings(mac, open_valve=want_open)
-                if not ok:
-                    return
-                log("CMD valve ->", mac, "open" if want_open else "close")
-                # Do not mutate cached device state; wait for a device frame
-                base = f"{TOPIC_PREFIX}/{mac}"
-                pub(f"{base}/state/valve_open", "1" if want_open else "0", retain=False)
-                try:
-                    pub(
-                        f"{base}/attributes/valve_switch",
-                        {"icon_color": icon_color("valve_switch", ("1" if want_open else "0"))},
-                        retain=False,
-                    )
-                except Exception:
-                    pass
-                try:
-                    threading.Thread(target=_retry_apply_valve, args=(mac, want_open), daemon=True).start()
-                except Exception:
-                    pass
-            elif cmd[:1] == ["dry_flag"]:
-                pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
-                up = pl.upper()
-                want_on = up in ("1","ON","OPEN","TRUE","YES") or pl.lower() == "on"
-                # Mark command in-flight to suppress contradictory device state for a short window
-                try:
-                    pending_dry[mac] = {"desired": bool(want_on), "ts": time.time()}
-                except Exception:
-                    pass
-                # Publish settings with desired dry flag
-                ok = publish_settings(mac, dry=want_on)
-                if not ok:
-                    return
-                log("CMD dry_flag ->", mac, "on" if want_on else "off")
-
-                # Do not mutate cache; wait for device to confirm
-                base = f"{TOPIC_PREFIX}/{mac}"
-                pub(f"{base}/settings/dry_flag", "on" if want_on else "off", retain=True)
-                # Mirror also status/dry_flag for consistency
-                pub(f"{base}/settings/status/dry_flag", "yes" if want_on else "no", retain=True)
-                try:
-                    pub(
-                        f"{base}/attributes/dry_flag",
-                        {"icon_color": icon_color("floor_wash", ("on" if want_on else "off"))},
-                        retain=False,
-                    )
-                except Exception:
-                    pass
-                # Kick off a background retry if device state doesn't change
-                try:
-                    threading.Thread(target=_retry_apply_dry_flag, args=(mac, want_on), daemon=True).start()
-                except Exception:
-                    pass
-
-            elif cmd[:1] == ["close_on_offline"]:
-                pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
-                up = pl.upper()
-                want_on = up in ("1","ON","CLOSE","TRUE","YES") or pl.lower() in ("on","close")
-                st = state_cache.get(mac, {})
-                ok = publish_settings(mac, close_on_offline=want_on)
-                if not ok:
-                    return
-                pref = None  # replaced by publish_settings
-                if False and not pref:
-                    log("No cloud prefix known for", mac, "‚ waiting for incoming frame to learn it")
-                    return
-                # c.publish removed; handled by publish_settings above
-                log("CMD close_on_offline ->", mac, "on" if want_on else "off")
-
-                # Do not mutate cache; wait for device confirmation
-                base = f"{TOPIC_PREFIX}/{mac}"
-                pub(f"{base}/settings/close_valve_flag", "close" if want_on else "open", retain=True)
-                try:
-                    threading.Thread(target=_retry_apply_close_on_offline, args=(mac, want_on), daemon=True).start()
-                except Exception:
-                    pass
-
-            elif cmd[:2] == ["time", "set"]:
-                # Accepts either numeric epoch seconds, ISO string, or 'now'
-                pl_raw = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
-                epoch = None
-                if not pl_raw or pl_raw.lower() == "now" or pl_raw.lower() == "press":
-                    epoch = int(time.time())
-                else:
-                    try:
-                        # Try integer epoch first
-                        epoch = int(float(pl_raw))
-                    except Exception:
-                        # Try ISO 8601 (python 3.11 fromisoformat handles many forms)
-                        try:
-                            dt = datetime.fromisoformat(pl_raw)
-                            if dt.tzinfo is None:
-                                # Treat naive as LOCAL time (Neptun reports local time)
-                                epoch = int(time.mktime(dt.timetuple()))
-                            else:
-                                epoch = int(dt.timestamp())
-                        except Exception:
-                            epoch = int(time.time())
-
-                frame = compose_time_set_frame(epoch)
-                pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
-                if not pref:
-                    log("No cloud prefix known for", mac, ", waiting for incoming frame to learn it")
-                    return
-                # Retain time-set so device receives it even if reconnects; device clears topic after processing
-                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
-                log("CMD time set (retained) ->", mac, epoch)
-
-            elif len(cmd) >= 1 and cmd[0].startswith("line_") and cmd[0].endswith("_type"):
-                # Unified handler for line type changes using publish_settings + retry
-                try:
-                    part = cmd[0]  # e.g. line_1_type
-                    idx = int(part.split("_")[1])
-                except Exception:
-                    idx = None
-                if idx is None or not (1 <= idx <= 4):
-                    return
-                pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip().lower()
-                want_counter = pl in ("1","on","true","yes","counter") or pl == "counter"
-                try:
-                    base_cfg = int(state_cache.get(mac, {}).get("line_in_cfg", 0)) & 0x0F
-                except Exception:
-                    base_cfg = 0
-                mask = 1 << (idx - 1)
-                new_cfg = (base_cfg | mask) if want_counter else (base_cfg & (~mask & 0x0F))
-                ok = publish_settings(mac, line_cfg=new_cfg)
-                if not ok:
-                    return
-                log(f"CMD line_{idx}_type ->", mac, "counter" if want_counter else "sensor")
-                base = f"{TOPIC_PREFIX}/{mac}"
-                # Publish UI hint; device confirmation will follow in next frame
-                pub(f"{base}/settings/lines_in/line_{idx}", "counter" if want_counter else "sensor", retain=True)
-                try:
-                    threading.Thread(target=_retry_apply_line_type, args=(mac, idx, want_counter), daemon=True).start()
-                except Exception:
-                    pass
-                return
-
-            elif len(cmd) >= 1 and cmd[0].startswith("line_") and cmd[0].endswith("_type"):
-                try:
-                    part = cmd[0]  # e.g. line_1_type
-                    idx = int(part.split("_")[1])
-                except Exception:
-                    idx = None
-                if idx is None or not (1 <= idx <= 4):
-                    return
-                pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip().lower()
-                want_counter = pl in ("1","on","true","yes","counter") or pl == "counter"
-                st = state_cache.get(mac, {})
-                base_cfg = int(st.get("line_in_cfg", 0)) & 0x0F
-                mask = 1 << (idx - 1)
-                if want_counter:
-                    new_cfg = base_cfg | mask
-                else:
-                    new_cfg = base_cfg & (~mask & 0x0F)
-                frame = compose_settings_frame(
-                    open_valve=bool(st.get("valve_open", False)),
-                    dry=bool(st.get("dry_flag", False)),
-                    close_on_offline=bool(st.get("flag_cl_valve", False)),
-                    line_cfg=new_cfg
-                )
-                pref = CLOUD_PREFIX or mac_to_prefix.get(mac, "")
-                if not pref:
-                    log("No cloud prefix known for", mac, "‚ waiting for incoming frame to learn it")
-                    return
-                c.publish(f"{pref}/{mac}/to", frame, qos=0, retain=True)
-                log(f"CMD line_{idx}_type ->", mac, "counter" if want_counter else "sensor")
-
-                # Optimistic local state update for select entity
-                st["line_in_cfg"] = new_cfg
-                state_cache[mac] = st
-                base = f"{TOPIC_PREFIX}/{mac}"
-                pub(f"{base}/settings/lines_in/line_{idx}", "counter" if want_counter else "sensor", retain=True)
-
-            elif cmd[:1] == ["module_lost_timeout"]:
-                # Set per-device Module Lost timeout in seconds via MQTT Number
-                pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
-                try:
-                    val = int(float(pl))
-                except Exception:
-                    return
-                if val < 10: val = 10
-                if val > 3600: val = 3600
-                module_lost_timeout[mac] = val
-                base = f"{TOPIC_PREFIX}/{mac}"
-                pub(f"{base}/settings/module_lost_timeout", val, retain=True)
-                log("CMD module_lost_timeout ->", mac, val)
-
-            elif len(cmd) >= 3 and cmd[0] == "counters" and cmd[1].startswith("line_"):
-                # Handle counters write commands:
-                # neptun/<mac>/cmd/counters/line_<i>/value/set  (payload=int liters)
-                # neptun/<mac>/cmd/counters/line_<i>/step/set   (payload=int L/pulse)
-                try:
-                    idx = int(cmd[1].split("_")[1])
-                except Exception:
-                    idx = None
-                if idx is None or not (1 <= idx <= 4):
-                    return
-                action = cmd[2]
-                payload = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
-
-                updates = {}
-                if action == "value" and len(cmd) >= 4 and cmd[3] == "set":
-                    try:
-                        desired_l = int(float(payload))
-                    except Exception:
-                        return
-                    updates[idx] = (desired_l, None)
-                elif action == "step" and len(cmd) >= 4 and cmd[3] == "set":
-                    try:
-                        step = int(float(payload))
-                        if not (0 < step <= 255):
-                            return
-                    except Exception:
-                        return
-                    updates[idx] = (None, step)
-                else:
-                    return
-                ok = publish_counters_update(mac, updates)
-                if not ok:
-                    return
-                log(f"CMD counters line_{idx} {action} ->", mac, payload)
-                try:
-                    if action == "value":
-                        threading.Thread(target=_retry_apply_counter_value, args=(mac, idx, int(float(payload))), daemon=True).start()
-                    elif action == "step":
-                        threading.Thread(target=_retry_apply_counter_step, args=(mac, idx, int(float(payload))), daemon=True).start()
-                except Exception:
-                    pass
-            
-
+            _handle_command_message(c, t, msg)
     except Exception as e:
         log("on_message error:", e)
     
     # Restore retained settings (non-cmd topics)
     try:
-        t = msg.topic
-        if t.startswith(f"{TOPIC_PREFIX}/") and "/settings/" in t and t.endswith("/module_lost_timeout"):
-            mac = t.split("/")[1]
-            pl = (msg.payload.decode("utf-8","ignore") if msg.payload else "").strip()
-            try:
-                val = int(float(pl))
-            except Exception:
-                return
-            if val < 10: val = 10
-            if val > 3600: val = 3600
-            module_lost_timeout[mac] = val
-            if DEBUG:
-                log("RESTORE module_lost_timeout <-", mac, val)
+        _restore_retained_settings(msg.topic, msg)
     except Exception:
         pass
 
@@ -2025,14 +1900,7 @@ def main():
                         base = f"{TOPIC_PREFIX}/{mac}"
                         val = "yes" if lost else "no"
                         pub(f"{base}/settings/status/module_lost", val, retain=True)
-                        try:
-                            pub(
-                                f"{base}/attributes/module_lost",
-                                {"icon_color": icon_color("module_lost", val), "icon": icon_name("module_lost", val)},
-                                retain=False,
-                            )
-                        except Exception:
-                            pass
+                        publish_visual_attributes(f"{base}/attributes/module_lost", "module_lost", val, retain=False)
                         # Update discovery icon when module_lost bucket changes
                         try:
                             prev_cache = state_cache.get(mac, {})
@@ -2040,18 +1908,18 @@ def main():
                             if val != last_b:
                                 device, safe_mac, dev_id = make_device(mac)
                                 mod_lost_id = f"neptun_{safe_mac}_module_lost"
-                                mod_lost_conf = {
-                                    "name": f"Module Lost",
-                                    "unique_id": mod_lost_id,
-                                    "state_topic": f"{base}/settings/status/module_lost",
-                                    "payload_on": "yes",
-                                    "payload_off": "no",
-                                    "device_class": "problem",
-                                    "icon": icon_name("module_lost", val),
-                                    "json_attributes_topic": f"{base}/attributes/module_lost",
-                                    "device": device
-                                }
-                                pub(f"{DISCOVERY_PRE}/binary_sensor/{mod_lost_id}/config", mod_lost_conf, retain=True)
+                                publish_discovery_config(
+                                    "binary_sensor",
+                                    mod_lost_id,
+                                    device,
+                                    name="Module Lost",
+                                    state_topic=f"{base}/settings/status/module_lost",
+                                    payload_on="yes",
+                                    payload_off="no",
+                                    device_class="problem",
+                                    icon=icon_name("module_lost", val),
+                                    json_attributes_topic=f"{base}/attributes/module_lost",
+                                )
                                 prev_cache["module_lost_bucket"] = val
                                 state_cache[mac] = prev_cache
                         except Exception:
