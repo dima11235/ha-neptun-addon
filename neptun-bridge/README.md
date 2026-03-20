@@ -10,11 +10,10 @@ The add-on starts an embedded Mosquitto broker, intercepts the device connection
 - Publishes counters, line states, signal diagnostics, and other attributes with `retain` support.
 - Writes a detailed log and publishes raw frames to `neptun/<MAC>/raw/*` for debugging.
 
-## What's New in 0.2.5
-- Cleaned up the MQTT command router and removed dead duplicate branches in the bridge logic.
-- Reduced duplication in Home Assistant discovery and MQTT attribute publishing with shared helper functions.
-- Kept the existing MQTT topics and entity model intact while making the bridge code easier to extend for the next features.
-- Refreshed the release package and documentation so the published add-on matches the current codebase.
+## What's New in 0.2.6
+- Fixed controller signal normalization so values above the old `0..4` scale are no longer forced to `100%`.
+- Kept compatibility with existing `0..4` sensor signal values while also accepting wider controller quality scales.
+- Refreshed the release package and notes for the current bridge behavior.
 
 ## Requirements
 - Home Assistant OS or Supervisor with access to the add-on store.

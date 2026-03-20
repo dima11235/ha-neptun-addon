@@ -132,15 +132,26 @@ def normalize_battery(v):
     if x > 100: x = 100
     return x
 
-# Convert 0..4 RSSI bars to percent 0..100
+# Normalize different RSSI/LQI scales to percent 0..100.
+#
+# Observed payloads are not fully consistent:
+# - wireless sensors commonly report 0..4 bars;
+# - module RSSI may arrive as 0..31 quality or already as 0..100.
+# Older code clamped any value >4 to 4, which turned many real values into 100%.
 def rssi_bars_to_percent(v):
     try:
         x = int(v)
     except Exception:
         return None
-    if x < 0: x = 0
-    if x > 4: x = 4
-    return x * 25
+    if x < 0:
+        x = 0
+    if x <= 4:
+        return x * 25
+    if x <= 31:
+        return int(round((x * 100) / 31))
+    if x <= 100:
+        return x
+    return 100
 
 def wireless_sensor_id(sensor) -> int:
     """Best-effort conversion of sensor id/line field to int."""
